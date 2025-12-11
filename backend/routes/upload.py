@@ -38,7 +38,8 @@ async def upload_file(
             "whisper_hash": whisper_hash,
             "status": "processing",
             "mode": mode,
-            "original_filename": file.filename
+            "original_filename": file.filename,
+            "local_file_path": file_path # Explicitly save path for retrieval
         }
         
         # 4. Persist initial status
