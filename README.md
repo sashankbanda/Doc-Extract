@@ -1,106 +1,37 @@
-# DocExtract Web Application
+# DocExtract Backend
 
-DocExtract provides a browser-based workspace for uploading documents, running AI-assisted parsing, and reviewing extracted fields before exporting structured data. This repository contains the React single-page application that powers that experience.
+A FastAPI backend for extracting data from documents using **LLMWhisperer V2**.
 
-## Features
+## Workflow (Pure Polling)
 
-- Upload PDF and image files via drag-and-drop or file selector
-- Render documents side-by-side with extracted fields for quick QA
-- Highlight overlays to visualize detected regions in the original document
-- Tabular view of structured results for faster verification
-- Responsive layout designed for desktop and large-format screens
+This backend strictly uses a polling mechanism. No webhooks are involved.
 
-## Prerequisites
+1.  **POST /upload**:
+    - Accepts `file` (multipart/form-data).
+    - Returns `whisper_hash`.
+    - Backend submits job to LLMWhisperer V2 (async).
+2.  **GET /status?whisper_hash=<hash>**:
+    - Frontend polls this endpoint.
+    - Backend checks upstream status and caches the result locally.
+    - Returns `{ "status": "processing" | "processed" | "error" }`.
+3.  **GET /retrieve?whisper_hash=<hash>**:
+    - Called **ONCE** after status is "processed".
+    - Backend fetches result from LLMWhisperer and saves to disk.
+    - Future calls read from disk.
+4.  **GET /highlight?whisper_hash=<hash>&line=<n>...**:
+    - Returns highlight coordinates for specific lines using cached data.
+    - **Note**: Some lines may return `400 Bad Request` if they lack valid bounding box data (e.g. `height=0`). Frontend should handle this gracefully (skip highlighting).
 
-- Node.js 18+ (LTS recommended)
-- npm 9+
+## Setup
 
-Verify your versions:
-
-```sh
-node -v
-npm -v
-```
-
-## Installation
-
-```sh
-git clone <repository-url>
-cd <repository-directory>
-npm install
-```
-
-### Local Development
-
-```sh
-npm run dev
-```
-
-The Vite dev server runs on `http://localhost:8080` by default (override via `VITE_PORT` or by editing `vite.config.ts`).
-
-### Production Build
-
-```sh
-npm run build
-```
-
-The optimized bundle is output to `dist/`. Preview the production build locally with:
-
-```sh
-npm run preview
-```
-
-## Available Scripts
-
-- `npm run dev` – start the development server with hot module replacement
-- `npm run build` – create a production build
-- `npm run build:dev` – build using development mode settings
-- `npm run preview` – serve the contents of `dist/` locally
-- `npm run lint` – execute ESLint across the codebase
-
-## Configuration
-
-Runtime configuration is handled via Vite environment variables. Create `.env` (or `.env.local`) files at the project root to supply API endpoints or feature flags, e.g.:
-
-```
-VITE_API_BASE_URL=https://api.example.com
-VITE_ENABLE_EXPERIMENTAL_WORKFLOWS=false
-```
-
-Restart the dev server after updating environment files.
-
-## Project Structure
-
-- `src/App.tsx` – top-level route layout
-- `src/components/` – reusable UI primitives and composite widgets
-- `src/components/upload/` – document upload workflows
-- `src/components/workspace/` – panels for PDF preview, highlights, tables, and template fields
-- `src/hooks/` – shared React hooks
-- `src/pages/` – route-level components (`Home`, `Upload`, `Workspace`, etc.)
-- `src/types/` – shared TypeScript definitions for documents and extraction results
-- `public/` – static assets served as-is (favicons, robots file, etc.)
-
-## Styling and UI
-
-The interface is built with Tailwind CSS, shadcn/ui components, and Lucide icons. Theme toggling and layout primitives live under `src/components/ui/`.
-
-## Testing (Planned)
-
-Automated tests are not yet configured. Recommended next steps:
-
-1. Introduce Vitest for component and hook unit tests
-2. Add Playwright or Cypress for key end-to-end document workflows
-
-## Contribution Workflow
-
-1. Create a feature branch from `main`
-2. Run `npm run lint` and ensure the dev server is warning-free
-3. Submit a pull request with a concise summary and testing notes
-
-## Deployment
-
-Deploy the `dist/` folder using your preferred static hosting provider (Netlify, Vercel, Azure Static Web Apps, AWS S3 + CloudFront, etc.). Configure any required environment variables in the provider's dashboard to match your `.env` settings.
-
----
-
-Need help or found a bug? Open an issue in this repository so we can keep DocExtract improving.
+1.  Set environment variables in `.env`:
+    ```
+    LLMWHISPERER_API_KEY=...
+    LLMWHISPERER_BASE_URL_V2=...
+    CORS_ORIGINS=http://localhost:3000
+    ```
+2.  Run server (from the root directory `DocExtract/`):
+    ```bash
+    # Ensure you are in D:\projects_all_time\02 DocExtract\00 code\DocExtract
+    uvicorn backend.main:app --reload --port 8005
+    ```
