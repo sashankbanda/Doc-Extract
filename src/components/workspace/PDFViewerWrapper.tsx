@@ -170,10 +170,11 @@ export function PDFViewerWrapper({
                   }}
                 >
                   <div 
-                    className="relative inline-block"
+                    className="relative"
                     style={{ 
                       width: dims?.width ? `${dims.width}px` : 'auto',
-                      height: dims?.height ? `${dims.height}px` : 'auto'
+                      height: dims?.height ? `${dims.height}px` : 'auto',
+                      display: 'inline-block'
                     }}
                   >
                     <canvas

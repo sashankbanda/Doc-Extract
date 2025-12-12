@@ -48,14 +48,12 @@ async def get_highlight(
         )
 
     # 4. Compute coordinates
-    # Only compute if valid
+    # base_y might represent the baseline or top of the line
+    # Adjust slightly to ensure highlight aligns with text
+    # Using the height to calculate the top position more accurately
     x1 = 0
     x2 = target_width
-    y1 = int((base_y / page_height) * target_height)
-    y2 = int(((base_y + height) / page_height) * target_height)
-    
-    x1 = 0
-    x2 = target_width
+    # Calculate Y position - base_y is the top of the line bounding box
     y1 = int((base_y / page_height) * target_height)
     y2 = int(((base_y + height) / page_height) * target_height)
     

@@ -154,7 +154,13 @@ export default function Workspace() {
         // API returns 0-based page, convert to 1-based for PDF.js
         const pdfPage = rect.page + 1;
         
+        // The coordinates from API are in viewport space (scale 1.5)
+        // Canvas is rendered at viewport.width/height but displayed at displayWidth/Height (scaled by zoom)
+        // So coordinates need to be scaled by zoom/100 to match display size
+        const zoomScale = 100; // We'll get actual zoom from PDFViewerWrapper if needed, but for now use base scale
+        
         // Update bounding box with real coordinates (1-based page for PDF.js)
+        // Coordinates are in viewport space (scale 1.5), will be scaled by HighlightOverlay
         setActiveBoundingBox({
           x: rect.x1,
           y: rect.y1,
@@ -163,13 +169,60 @@ export default function Workspace() {
           page: pdfPage
         });
         
-        // Scroll to the page
-        const pageElement = document.getElementById(`page_${pdfPage}`);
-        if (pageElement) {
-          pageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
+        // Wait for highlight to render, then scroll to it
+        setTimeout(() => {
+          const pageElement = document.getElementById(`page_${pdfPage}`);
+          if (pageElement) {
+            // Find the scrollable container (PDF viewer area)
+            const scrollContainer = pageElement.closest('.overflow-auto');
+            
+            if (scrollContainer) {
+              // Get the canvas to determine zoom
+              const canvas = pageElement.querySelector('canvas') as HTMLCanvasElement;
+              const viewportWidth = dims.width; // Viewport width at scale 1.5
+              const displayWidth = canvas ? parseFloat(canvas.style.width || '0') : viewportWidth;
+              const zoom = displayWidth > 0 ? (displayWidth / viewportWidth) * 100 : 100;
+              
+              // Calculate the highlight position on the displayed canvas
+              // rect.y1 is in viewport coordinates (scale 1.5)
+              // Canvas display size = viewport.size * (zoom/100)
+              // So highlight y on display = rect.y1 * (zoom/100)
+              const highlightY = rect.y1 * (zoom / 100);
+              
+              // Get positions relative to container
+              const pageRect = pageElement.getBoundingClientRect();
+              const containerRect = scrollContainer.getBoundingClientRect();
+              
+              // Get canvas position within page element (account for padding/margins)
+              const canvasRect = canvas?.getBoundingClientRect();
+              const canvasOffsetY = canvasRect ? canvasRect.top - pageRect.top : 0;
+              
+              // Calculate scroll position to center the highlight
+              // Account for page position, canvas offset, and highlight position
+              const pageTop = pageRect.top - containerRect.top + scrollContainer.scrollTop;
+              const targetScrollTop = pageTop + canvasOffsetY + highlightY - (containerRect.height / 2);
+              
+              console.log("[Workspace] Scroll calculation:", {
+                pageTop,
+                canvasOffsetY,
+                highlightY,
+                targetScrollTop,
+                containerHeight: containerRect.height
+              });
+              
+              scrollContainer.scrollTo({
+                top: Math.max(0, targetScrollTop),
+                left: scrollContainer.scrollLeft, // Preserve horizontal scroll
+                behavior: 'smooth'
+              });
+            } else {
+              // Fallback: just scroll page into view
+              pageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+          }
+        }, 150);
         
-        setTimeout(() => setActiveBoundingBox(null), 2000);
+        setTimeout(() => setActiveBoundingBox(null), 3000);
       } catch (e: any) {
         // Check for 400 errors (invalid line index or invalid bbox)
         if (e.message && (e.message.includes("Invalid") || e.message.includes("no valid bounding box"))) {
