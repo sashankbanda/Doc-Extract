@@ -1,12 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import PdfViewer, { PdfViewerHandle } from './PdfViewer';
 import TextPanel from './TextPanel';
+import { apiRetrieve, apiHighlight, API_BASE } from '@/lib/api';
 
 interface DocumentWorkspaceProps {
     whisperHash: string;
 }
-
-const API_BASE = "http://localhost:8005";
 
 const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ whisperHash }) => {
     // Data State
@@ -26,17 +25,20 @@ const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ whisperHash }) =>
     // 1. Fetch Retrieve Data on Mount
     useEffect(() => {
         const fetchData = async () => {
+            console.log("[DocumentWorkspace] Fetching data for whisperHash:", whisperHash);
             setLoading(true);
             try {
-                const res = await fetch(`${API_BASE}/retrieve?whisper_hash=${whisperHash}`);
-                if (!res.ok) throw new Error("Failed to retrieve document data");
-                
-                const data = await res.json();
+                const data = await apiRetrieve(whisperHash);
+                console.log("[DocumentWorkspace] Retrieved data:", {
+                    resultTextLength: data.result_text?.length,
+                    lineMetadataLength: data.line_metadata?.length
+                });
                 setResultText(data.result_text || "");
                 setLineMetadata(data.line_metadata || []);
                 
                 // Optional: set initial page from metadata if desirable, default is 1
             } catch (err: any) {
+                console.error("[DocumentWorkspace] Error fetching data:", err);
                 setError(err.message);
             } finally {
                 setLoading(false);
@@ -45,13 +47,16 @@ const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ whisperHash }) =>
 
         if (whisperHash) {
             fetchData();
+        } else {
+            console.warn("[DocumentWorkspace] No whisperHash provided");
         }
     }, [whisperHash]);
 
     // 2. Handle Line Click
     const handleLineClick = async (lineIndex: number) => {
+        console.log("[DocumentWorkspace] Line clicked:", lineIndex);
         if (!lineMetadata[lineIndex]) {
-            console.warn("No metadata for line:", lineIndex);
+            console.warn("[DocumentWorkspace] No metadata for line:", lineIndex);
             return;
         }
 
@@ -86,29 +91,22 @@ const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ whisperHash }) =>
         // Get dimensions
         const dims = pageDimensions[targetPage];
         if (!dims) {
-            console.warn("Dimensions not loaded for page", targetPage);
+            console.warn("[DocumentWorkspace] Dimensions not loaded for page", targetPage, "Available pages:", Object.keys(pageDimensions));
             return;
         }
 
+        console.log("[DocumentWorkspace] Calling highlight API with dimensions:", dims);
+
         // Call Highlight API
         try {
-            const params = new URLSearchParams({
-                whisper_hash: whisperHash,
-                line: lineIndex.toString(),
-                target_width: dims.width.toString(),
-                target_height: dims.height.toString()
-            });
-
-            const res = await fetch(`${API_BASE}/highlight?${params}`);
-            if (!res.ok) {
-                if (res.status === 400) {
-                    console.warn("Line skipped by backend (invalid bbox)");
-                    return; 
-                }
-                throw new Error("Highlight failed");
-            }
-
-            const rect = await res.json();
+            const rect = await apiHighlight(
+                whisperHash,
+                lineIndex,
+                dims.width,
+                dims.height
+            );
+            
+            console.log("[DocumentWorkspace] Got highlight rect:", rect);
             
             // Add to highlights list
             setHighlights([{ 
@@ -120,8 +118,13 @@ const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({ whisperHash }) =>
             // We did it above, but safe to do it here too if logic requires it.
             pdfViewerRef.current?.scrollToPage(targetPage);
 
-        } catch (e) {
-            console.error("Highlight error:", e);
+        } catch (e: any) {
+            // Check for 400 errors (invalid line index or invalid bbox)
+            if (e.message && (e.message.includes("Invalid") || e.message.includes("no valid bounding box"))) {
+                console.warn("[DocumentWorkspace] Line skipped by backend:", e.message);
+                return;
+            }
+            console.error("[DocumentWorkspace] Highlight error:", e);
         }
     };
 

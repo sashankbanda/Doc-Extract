@@ -4,25 +4,112 @@ import { ZoomIn, ZoomOut, RotateCw, Maximize2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BoundingBox } from "@/types/document";
 import { HighlightOverlay } from "./HighlightOverlay";
+import * as pdfjsLib from 'pdfjs-dist';
+
+// Set up PDF.js worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
 interface PDFViewerWrapperProps {
   documentId: string;
+  pdfUrl?: string;
   highlights?: BoundingBox[];
   activeHighlight?: BoundingBox | null;
+  onPageDimensions?: (pageNum: number, width: number, height: number) => void;
 }
 
 export function PDFViewerWrapper({
   documentId,
+  pdfUrl,
   highlights = [],
   activeHighlight,
+  onPageDimensions,
 }: PDFViewerWrapperProps) {
   const [zoom, setZoom] = useState(100);
   const [currentPage, setCurrentPage] = useState(1);
-  const totalPages = 5; // Mock value
+  const [totalPages, setTotalPages] = useState(0);
+  const [pdfDoc, setPdfDoc] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
+  const [canvasDimensions, setCanvasDimensions] = useState<Map<number, { width: number, height: number }>>(new Map());
   const containerRef = useRef<HTMLDivElement>(null);
+  const canvasRefs = useRef<Map<number, HTMLCanvasElement>>(new Map());
 
   const handleZoomIn = () => setZoom((prev) => Math.min(prev + 25, 200));
   const handleZoomOut = () => setZoom((prev) => Math.max(prev - 25, 50));
+
+  // Load PDF
+  useEffect(() => {
+    if (!pdfUrl) return;
+
+    const loadPdf = async () => {
+      try {
+        const loadingTask = pdfjsLib.getDocument(pdfUrl);
+        const doc = await loadingTask.promise;
+        setPdfDoc(doc);
+        setTotalPages(doc.numPages);
+      } catch (error) {
+        console.error("[PDFViewerWrapper] Error loading PDF:", error);
+      }
+    };
+
+    loadPdf();
+  }, [pdfUrl]);
+
+  // Render PDF pages
+  useEffect(() => {
+    if (!pdfDoc) return;
+
+    const renderPages = async () => {
+      for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
+        const canvas = canvasRefs.current.get(pageNum);
+        if (!canvas) continue;
+
+        try {
+          const page = await pdfDoc.getPage(pageNum);
+          // Use a fixed scale for consistent rendering, zoom affects display size
+          const baseScale = 1.5; // Base scale for rendering
+          const viewport = page.getViewport({ scale: baseScale });
+          
+          // Set canvas size based on zoom
+          const displayWidth = viewport.width * (zoom / 100);
+          const displayHeight = viewport.height * (zoom / 100);
+          
+          // Set actual canvas resolution (for rendering quality)
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          
+          // Set display size via CSS
+          canvas.style.width = `${displayWidth}px`;
+          canvas.style.height = `${displayHeight}px`;
+
+          const context = canvas.getContext('2d');
+          if (!context) continue;
+
+          const renderContext = {
+            canvasContext: context,
+            viewport: viewport
+          };
+
+          await page.render(renderContext).promise;
+          
+          // Store canvas dimensions for overlay positioning
+          setCanvasDimensions(prev => {
+            const newMap = new Map(prev);
+            newMap.set(pageNum, { width: displayWidth, height: displayHeight });
+            return newMap;
+          });
+          
+          // Report dimensions at the actual rendering scale (for highlight calculations)
+          // These dimensions match what the canvas is actually rendered at
+          if (onPageDimensions) {
+            onPageDimensions(pageNum, viewport.width, viewport.height);
+          }
+        } catch (error) {
+          console.error(`[PDFViewerWrapper] Error rendering page ${pageNum}:`, error);
+        }
+      }
+    };
+
+    renderPages();
+  }, [pdfDoc, zoom, onPageDimensions]);
 
   return (
     <div className="h-full flex flex-col">
@@ -64,77 +151,52 @@ export function PDFViewerWrapper({
         className="flex-1 overflow-auto p-6 relative"
         style={{ backgroundColor: "hsl(var(--muted) / 0.3)" }}
       >
-        <motion.div
-          className="relative mx-auto bg-white rounded-lg shadow-2xl overflow-hidden"
-          style={{
-            width: `${(595 * zoom) / 100}px`,
-            height: `${(842 * zoom) / 100}px`,
-            transformOrigin: "top center",
-          }}
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.3 }}
-        >
-          {/* Mock PDF Content */}
-          <div className="absolute inset-0 p-8 text-gray-800 text-sm leading-relaxed">
-            <div className="space-y-4">
-              <h1 className="text-xl font-bold text-gray-900">Sample Document</h1>
-              <div className="h-px bg-gray-200" />
-              <p className="text-gray-600">
-                This is a preview of your uploaded PDF document. The actual PDF.js
-                integration will render the real document content here.
-              </p>
-              <div className="grid grid-cols-2 gap-4 mt-6">
-                <div className="p-3 bg-gray-50 rounded-lg">
-                  <span className="text-xs text-gray-500">Invoice Number</span>
-                  <p className="font-medium">INV-2024-001</p>
-                </div>
-                <div className="p-3 bg-gray-50 rounded-lg">
-                  <span className="text-xs text-gray-500">Date</span>
-                  <p className="font-medium">Dec 10, 2024</p>
-                </div>
-                <div className="p-3 bg-gray-50 rounded-lg">
-                  <span className="text-xs text-gray-500">Amount</span>
-                  <p className="font-medium">$2,450.00</p>
-                </div>
-                <div className="p-3 bg-gray-50 rounded-lg">
-                  <span className="text-xs text-gray-500">Status</span>
-                  <p className="font-medium text-green-600">Paid</p>
-                </div>
-              </div>
-              <div className="mt-6">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="bg-gray-100">
-                      <th className="p-2 text-left">Item</th>
-                      <th className="p-2 text-right">Qty</th>
-                      <th className="p-2 text-right">Price</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr className="border-b">
-                      <td className="p-2">Web Development</td>
-                      <td className="p-2 text-right">40</td>
-                      <td className="p-2 text-right">$1,600</td>
-                    </tr>
-                    <tr className="border-b">
-                      <td className="p-2">UI Design</td>
-                      <td className="p-2 text-right">20</td>
-                      <td className="p-2 text-right">$850</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
+        {pdfDoc ? (
+          <div className="flex flex-col items-center gap-4">
+            {Array.from({ length: totalPages }, (_, i) => {
+              const pageNum = i + 1;
+              return (
+                <motion.div
+                  key={pageNum}
+                  id={`page_${pageNum}`}
+                  className="relative bg-white rounded-lg shadow-2xl overflow-visible mb-4"
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.3, delay: i * 0.1 }}
+                >
+                  <div 
+                    className="relative inline-block"
+                    style={{ 
+                      width: canvasDimensions.get(pageNum)?.width ? `${canvasDimensions.get(pageNum)!.width}px` : 'auto',
+                      height: canvasDimensions.get(pageNum)?.height ? `${canvasDimensions.get(pageNum)!.height}px` : 'auto'
+                    }}
+                  >
+                    <canvas
+                      ref={(el) => {
+                        if (el) canvasRefs.current.set(pageNum, el);
+                      }}
+                      className="block"
+                    />
+                    {/* Highlight Overlay for this page - positioned absolutely over canvas */}
+                    {(highlights.some(h => h.page === pageNum) || activeHighlight?.page === pageNum) && (
+                      <HighlightOverlay
+                        highlights={highlights.filter(h => h.page === pageNum)}
+                        activeHighlight={activeHighlight?.page === pageNum ? activeHighlight : null}
+                        scale={zoom / 100}
+                        canvasWidth={canvasDimensions.get(pageNum)?.width || 0}
+                        canvasHeight={canvasDimensions.get(pageNum)?.height || 0}
+                      />
+                    )}
+                  </div>
+                </motion.div>
+              );
+            })}
           </div>
-
-          {/* Highlight Overlay */}
-          <HighlightOverlay
-            highlights={highlights}
-            activeHighlight={activeHighlight}
-            scale={zoom / 100}
-          />
-        </motion.div>
+        ) : (
+          <div className="flex items-center justify-center h-full">
+            <p className="text-muted-foreground">Loading PDF...</p>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -6,7 +6,7 @@ import { LayoutText, BoundingBox } from "@/types/document";
 interface ExtractedTextPanelProps {
   items: LayoutText[];
   onItemHover: (boundingBox: BoundingBox | null) => void;
-  onItemClick: (boundingBox: BoundingBox) => void;
+  onItemClick: (boundingBox: BoundingBox, item: LayoutText, index: number) => void;
 }
 
 const iconMap = {
@@ -36,7 +36,7 @@ export function ExtractedTextPanel({
             )}
             onMouseEnter={() => onItemHover(item.boundingBox)}
             onMouseLeave={() => onItemHover(null)}
-            onClick={() => onItemClick(item.boundingBox)}
+            onClick={() => onItemClick(item.boundingBox, item, index)}
           >
             <div className="flex items-start gap-3">
               <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
@@ -46,7 +46,7 @@ export function ExtractedTextPanel({
                 <span className="text-xs text-muted-foreground uppercase tracking-wider mb-1 block">
                   {item.type}
                 </span>
-                <p className="text-sm text-foreground leading-relaxed">
+                <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap font-mono">
                   {item.text}
                 </p>
               </div>

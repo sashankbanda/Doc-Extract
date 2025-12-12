@@ -11,7 +11,15 @@ class Config:
         raise ValueError("LLMWHISPERER_API_KEY environment variable is not set.")
     
     LLMWHISPERER_BASE_URL_V2 = os.getenv("LLMWHISPERER_BASE_URL_V2", "https://llmwhisperer-api.us-central.unstract.com/api/v2")
-    CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
+    # Default CORS origins - include common dev ports
+    default_cors = "http://localhost:3000,http://localhost:5173,http://localhost:8080"
+    cors_env = os.getenv("CORS_ORIGINS", default_cors)
+    # Always ensure localhost:8080 is included
+    cors_list = [origin.strip() for origin in cors_env.split(",")]
+    if "http://localhost:8080" not in cors_list:
+        cors_list.append("http://localhost:8080")
+    CORS_ORIGINS = cors_list
+    print(f"[Config] CORS_ORIGINS loaded: {CORS_ORIGINS} (from env: {cors_env})")
     BACKEND_BASE_URL = os.getenv("BACKEND_BASE_URL", "http://localhost:8005")
     
     # Input/Output directories

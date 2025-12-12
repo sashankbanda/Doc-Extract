@@ -1,5 +1,6 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { FileText, Table, Tag } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TwoPaneLayout } from "@/components/workspace/TwoPaneLayout";
@@ -9,42 +10,7 @@ import { ExtractedTextPanel } from "@/components/workspace/ExtractedTextPanel";
 import { StructuredTablePanel } from "@/components/workspace/StructuredTablePanel";
 import { TemplateFieldsPanel } from "@/components/workspace/TemplateFieldsPanel";
 import { BoundingBox, LayoutText, ExtractedTable, ExtractedField } from "@/types/document";
-
-// Mock data
-const mockFiles = [
-  { id: "1", name: "Invoice_2024_001.pdf" },
-  { id: "2", name: "Contract_Agreement.pdf" },
-  { id: "3", name: "Financial_Report_Q4.pdf" },
-];
-
-const mockLayoutText: LayoutText[] = [
-  { id: "1", type: "heading", text: "Invoice #INV-2024-001", boundingBox: { x: 50, y: 50, width: 200, height: 30, page: 1 } },
-  { id: "2", type: "paragraph", text: "Thank you for your business. Please find the invoice details below.", boundingBox: { x: 50, y: 100, width: 400, height: 40, page: 1 } },
-  { id: "3", type: "list-item", text: "• Web Development Services - 40 hours @ $40/hr", boundingBox: { x: 50, y: 200, width: 350, height: 20, page: 1 } },
-  { id: "4", type: "list-item", text: "• UI/UX Design Services - 20 hours @ $42.50/hr", boundingBox: { x: 50, y: 230, width: 350, height: 20, page: 1 } },
-];
-
-const mockTables: ExtractedTable[] = [
-  {
-    id: "1",
-    headers: ["Item", "Quantity", "Unit Price", "Total"],
-    rows: [
-      [{ value: "Web Development" }, { value: "40 hrs" }, { value: "$40.00" }, { value: "$1,600.00" }],
-      [{ value: "UI Design" }, { value: "20 hrs" }, { value: "$42.50" }, { value: "$850.00" }],
-      [{ value: "Subtotal" }, { value: "" }, { value: "" }, { value: "$2,450.00" }],
-    ],
-    boundingBox: { x: 50, y: 300, width: 450, height: 120, page: 1 },
-  },
-];
-
-const mockFields: ExtractedField[] = [
-  { id: "1", label: "Invoice Number", value: "INV-2024-001", confidence: 0.98, boundingBox: { x: 380, y: 50, width: 120, height: 20, page: 1 } },
-  { id: "2", label: "Invoice Date", value: "December 10, 2024", confidence: 0.95, boundingBox: { x: 380, y: 80, width: 120, height: 20, page: 1 } },
-  { id: "3", label: "Due Date", value: "January 10, 2025", confidence: 0.92, boundingBox: { x: 380, y: 110, width: 120, height: 20, page: 1 } },
-  { id: "4", label: "Total Amount", value: "$2,450.00", confidence: 0.99, boundingBox: { x: 380, y: 420, width: 100, height: 25, page: 1 } },
-  { id: "5", label: "Vendor Name", value: "Acme Corp", confidence: 0.88, boundingBox: { x: 50, y: 150, width: 100, height: 20, page: 1 } },
-  { id: "6", label: "Payment Status", value: "Paid", confidence: 0.75, boundingBox: { x: 380, y: 450, width: 60, height: 20, page: 1 } },
-];
+import { apiRetrieve, apiHighlight, API_BASE } from "@/lib/api";
 
 type TabType = "text" | "tables" | "fields";
 
@@ -55,29 +21,181 @@ const tabs: { id: TabType; label: string; icon: typeof FileText }[] = [
 ];
 
 export default function Workspace() {
-  const [selectedFileId, setSelectedFileId] = useState(mockFiles[0].id);
-  const [activeTab, setActiveTab] = useState<TabType>("fields");
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const whisperHash = searchParams.get("whisper_hash");
+  const fileName = searchParams.get("fileName") || "document";
+
+  const [resultText, setResultText] = useState<string>("");
+  const [lineMetadata, setLineMetadata] = useState<any[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<TabType>("text");
   const [hoveredBoundingBox, setHoveredBoundingBox] = useState<BoundingBox | null>(null);
   const [activeBoundingBox, setActiveBoundingBox] = useState<BoundingBox | null>(null);
+  const [pageDimensions, setPageDimensions] = useState<Record<number, { width: number, height: number }>>({});
 
+  const handlePageDimensions = useCallback((pageNum: number, width: number, height: number) => {
+    setPageDimensions(prev => {
+      // Only update if dimensions actually changed to prevent infinite loops
+      if (prev[pageNum]?.width === width && prev[pageNum]?.height === height) {
+        return prev;
+      }
+      return {
+        ...prev,
+        [pageNum]: { width, height }
+      };
+    });
+  }, []);
+
+  // Log only once on mount
+  useEffect(() => {
+    console.log("[Workspace] Page loaded with whisper_hash:", whisperHash);
+    console.log("[Workspace] All search params:", Object.fromEntries(searchParams.entries()));
+  }, [whisperHash, searchParams]);
+
+  // Fetch data on mount
+  useEffect(() => {
+    if (!whisperHash) {
+      console.warn("[Workspace] No whisper_hash in URL, redirecting to upload");
+      navigate("/upload");
+      return;
+    }
+
+    const fetchData = async () => {
+      console.log("[Workspace] Fetching data for whisperHash:", whisperHash);
+      setLoading(true);
+      try {
+        const data = await apiRetrieve(whisperHash);
+        console.log("[Workspace] Retrieved data:", {
+          resultTextLength: data.result_text?.length,
+          lineMetadataLength: data.line_metadata?.length
+        });
+        setResultText(data.result_text || "");
+        setLineMetadata(data.line_metadata || []);
+      } catch (err: any) {
+        console.error("[Workspace] Error fetching data:", err);
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [whisperHash, navigate]);
+
+  // Convert result_text to LayoutText[] format - preserve visual structure
+  const layoutTextItems: LayoutText[] = useMemo(() => {
+    if (!resultText) return [];
+    const lines = resultText.split('\n');
+    return lines.map((line, index) => {
+      const metadata = lineMetadata[index];
+      let page = 1;
+      if (metadata && Array.isArray(metadata) && metadata.length > 0) {
+        page = (metadata[0] || 0) + 1; // Convert 0-based to 1-based
+      }
+      
+      // Preserve the exact text structure (including hex prefixes like "0x01:")
+      // The text already contains the visual structure from the PDF
+      const text = line.trim();
+      
+      // Determine type based on text content
+      let type: 'paragraph' | 'heading' | 'list-item' = 'paragraph';
+      if (text.length === 0) {
+        return null; // Skip completely empty lines
+      }
+      
+      // Check if it's a heading (starts with hex prefix and has uppercase text)
+      if (text.match(/^0x[0-9A-F]+:\s+[A-Z]/)) {
+        type = 'heading';
+      } else if (text.match(/^0x[0-9A-F]+:\s+[•\-]/)) {
+        type = 'list-item';
+      } else if (text.match(/^0x[0-9A-F]+:\s*$/)) {
+        // Empty line with just hex prefix
+        return null;
+      }
+
+      return {
+        id: `line-${index}`,
+        text: text, // Keep the full text including hex prefix to preserve structure
+        type,
+        boundingBox: {
+          x: 0,
+          y: 0,
+          width: 0,
+          height: 0,
+          page
+        }
+      };
+    }).filter((item): item is LayoutText => item !== null);
+  }, [resultText, lineMetadata]);
+
+  // Handle item interactions
   const handleItemHover = useCallback((boundingBox: BoundingBox | null) => {
     setHoveredBoundingBox(boundingBox);
   }, []);
 
-  const handleItemClick = useCallback((boundingBox: BoundingBox) => {
-    setActiveBoundingBox(boundingBox);
-    setTimeout(() => setActiveBoundingBox(null), 2000);
-  }, []);
+  const handleItemClick = useCallback(async (boundingBox: BoundingBox, item: LayoutText, index: number) => {
+    // Extract line index from item.id (format: "line-{index}")
+    const lineIndexMatch = item.id.match(/line-(\d+)/);
+    const lineIndex = lineIndexMatch ? parseInt(lineIndexMatch[1], 10) : index;
+    
+    // Convert 1-based page to 0-based for API, but keep 1-based for display
+    const apiPage = boundingBox.page - 1;
+    const displayPage = boundingBox.page;
+    
+    if (whisperHash && pageDimensions[displayPage]) {
+      const dims = pageDimensions[displayPage];
+      try {
+        console.log("[Workspace] Calling highlight for line:", lineIndex, "page (1-based):", displayPage);
+        const rect = await apiHighlight(whisperHash, lineIndex, dims.width, dims.height);
+        console.log("[Workspace] Got highlight rect:", rect);
+        
+        // API returns 0-based page, convert to 1-based for PDF.js
+        const pdfPage = rect.page + 1;
+        
+        // Update bounding box with real coordinates (1-based page for PDF.js)
+        setActiveBoundingBox({
+          x: rect.x1,
+          y: rect.y1,
+          width: rect.x2 - rect.x1,
+          height: rect.y2 - rect.y1,
+          page: pdfPage
+        });
+        
+        // Scroll to the page
+        const pageElement = document.getElementById(`page_${pdfPage}`);
+        if (pageElement) {
+          pageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        
+        setTimeout(() => setActiveBoundingBox(null), 2000);
+      } catch (e: any) {
+        // Check for 400 errors (invalid line index or invalid bbox)
+        if (e.message && (e.message.includes("Invalid") || e.message.includes("no valid bounding box"))) {
+          console.warn("[Workspace] Line skipped by backend:", e.message);
+          return;
+        }
+        console.error("[Workspace] Highlight error:", e);
+      }
+    } else {
+      console.warn("[Workspace] Missing data for highlight:", { whisperHash, pageDimensions: pageDimensions[displayPage], displayPage });
+    }
+  }, [whisperHash, pageDimensions]);
 
   // Collect all highlights
   const allHighlights = hoveredBoundingBox ? [hoveredBoundingBox] : [];
+
+  // Mock data for tables and fields (can be enhanced later)
+  const mockTables: ExtractedTable[] = [];
+  const mockFields: ExtractedField[] = [];
 
   const renderTabContent = () => {
     switch (activeTab) {
       case "text":
         return (
           <ExtractedTextPanel
-            items={mockLayoutText}
+            items={layoutTextItems}
             onItemHover={handleItemHover}
             onItemClick={handleItemClick}
           />
@@ -101,14 +219,48 @@ export default function Workspace() {
     }
   };
 
+  if (!whisperHash) {
+    return (
+      <div className="min-h-screen pt-16 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-muted-foreground">No document hash provided. Redirecting...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen pt-16 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-muted-foreground">Loading document data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen pt-16 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-destructive">Error: {error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  const pdfUrl = `${API_BASE}/document/${whisperHash}`;
+
   return (
     <div className="min-h-screen pt-16">
       <TwoPaneLayout
         leftPane={
           <PDFViewerWrapper
-            documentId={selectedFileId}
+            documentId={whisperHash}
+            pdfUrl={pdfUrl}
             highlights={allHighlights}
             activeHighlight={activeBoundingBox}
+            onPageDimensions={handlePageDimensions}
           />
         }
         rightPane={
@@ -116,9 +268,9 @@ export default function Workspace() {
             {/* Header with file selector */}
             <div className="flex items-center justify-between p-4 border-b border-border/50">
               <FileSelectorDropdown
-                files={mockFiles}
-                selectedId={selectedFileId}
-                onSelect={setSelectedFileId}
+                files={[{ id: whisperHash, name: fileName }]}
+                selectedId={whisperHash}
+                onSelect={() => {}}
               />
             </div>
 

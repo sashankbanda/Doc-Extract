@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import DocumentWorkspace from './DocumentWorkspace';
-
-const API_BASE = "http://localhost:8005";
+import { useNavigate } from 'react-router-dom';
+import { apiUpload, apiStatus } from '@/lib/api';
 
 interface JobHistoryItem {
     whisperHash: string;
@@ -10,6 +9,8 @@ interface JobHistoryItem {
 }
 
 const UploadAndProcess: React.FC = () => {
+    const navigate = useNavigate();
+    
     // State
     const [file, setFile] = useState<File | null>(null);
     const [whisperHash, setWhisperHash] = useState<string | null>(null);
@@ -45,20 +46,21 @@ const UploadAndProcess: React.FC = () => {
              if (!whisperHash) return;
 
              try {
-                 const res = await fetch(`${API_BASE}/status?whisper_hash=${whisperHash}`);
-                 if (res.ok) {
-                     const data = await res.json();
-                     // status: 'processing' | 'processed' | 'error'
-                     setStatus(data.status);
-                     
-                     if (data.status === 'processed') {
-                         setLoading(false);
-                         clearInterval(intervalId);
-                     } else if (data.status === 'error') {
-                         setError("Processing failed on server.");
-                         setLoading(false);
-                         clearInterval(intervalId);
-                     }
+                 const data = await apiStatus(whisperHash);
+                 // status: 'processing' | 'processed' | 'error'
+                 setStatus(data.status);
+                 
+                 if (data.status === 'processed') {
+                     setLoading(false);
+                     clearInterval(intervalId);
+                     // Navigate to workspace with whisper_hash
+                     const jobItem = history.find(j => j.whisperHash === whisperHash);
+                     const fileName = jobItem?.fileName || 'document';
+                     navigate(`/workspace?whisper_hash=${whisperHash}&fileName=${encodeURIComponent(fileName)}`);
+                 } else if (data.status === 'error') {
+                     setError("Processing failed on server.");
+                     setLoading(false);
+                     clearInterval(intervalId);
                  }
              } catch (err) {
                  console.error("Polling error:", err);
@@ -74,7 +76,7 @@ const UploadAndProcess: React.FC = () => {
         return () => {
             if (intervalId) clearInterval(intervalId);
         };
-    }, [whisperHash, status]);
+    }, [whisperHash, status, navigate, history]);
 
     // 3. Handle Upload
     const handleUpload = async () => {
@@ -83,18 +85,8 @@ const UploadAndProcess: React.FC = () => {
         setLoading(true);
         setError(null);
 
-        const formData = new FormData();
-        formData.append("file", file);
-
         try {
-            const res = await fetch(`${API_BASE}/upload`, {
-                method: "POST",
-                body: formData
-            });
-
-            if (!res.ok) throw new Error("Upload failed");
-
-            const data = await res.json();
+            const data = await apiUpload(file);
             const hash = data.whisper_hash;
             
             setWhisperHash(hash);
@@ -128,11 +120,6 @@ const UploadAndProcess: React.FC = () => {
         });
         setHistory([]);
     };
-
-    // --- Render: Workspace if processed ---
-    if (status === 'processed' && whisperHash) {
-        return <DocumentWorkspace whisperHash={whisperHash} />;
-    }
 
     // --- Render: Upload UI ---
     return (

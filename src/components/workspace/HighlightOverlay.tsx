@@ -5,12 +5,16 @@ interface HighlightOverlayProps {
   highlights: BoundingBox[];
   activeHighlight?: BoundingBox | null;
   scale?: number;
+  canvasWidth?: number;
+  canvasHeight?: number;
 }
 
 export function HighlightOverlay({
   highlights,
   activeHighlight,
   scale = 1,
+  canvasWidth,
+  canvasHeight,
 }: HighlightOverlayProps) {
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden">

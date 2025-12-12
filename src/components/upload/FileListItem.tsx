@@ -1,3 +1,4 @@
+import { forwardRef } from "react";
 import { motion } from "framer-motion";
 import { FileText, X, Check, Loader2, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -17,26 +18,28 @@ const statusConfig = {
   error: { icon: AlertCircle, color: "text-destructive", label: "Error" },
 };
 
-export function FileListItem({ file, onRemove }: FileListItemProps) {
-  const status = statusConfig[file.status];
-  const StatusIcon = status.icon;
-  const isLoading = file.status === "uploading" || file.status === "processing";
+export const FileListItem = forwardRef<HTMLDivElement, FileListItemProps>(
+  ({ file, onRemove }, ref) => {
+    const status = statusConfig[file.status];
+    const StatusIcon = status.icon;
+    const isLoading = file.status === "uploading" || file.status === "processing";
 
-  const formatSize = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
+    const formatSize = (bytes: number) => {
+      if (bytes < 1024) return `${bytes} B`;
+      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+      return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    };
 
-  return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, x: -20, height: 0 }}
-      animate={{ opacity: 1, x: 0, height: "auto" }}
-      exit={{ opacity: 0, x: 20, height: 0 }}
-      transition={{ duration: 0.3, ease: "easeOut" }}
-      className="glass rounded-xl p-4 mb-3"
-    >
+    return (
+      <motion.div
+        ref={ref}
+        layout
+        initial={{ opacity: 0, x: -20, height: 0 }}
+        animate={{ opacity: 1, x: 0, height: "auto" }}
+        exit={{ opacity: 0, x: 20, height: 0 }}
+        transition={{ duration: 0.3, ease: "easeOut" }}
+        className="glass rounded-xl p-4 mb-3"
+      >
       <div className="flex items-center gap-4">
         {/* File Icon */}
         <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
@@ -71,5 +74,8 @@ export function FileListItem({ file, onRemove }: FileListItemProps) {
         </div>
       </div>
     </motion.div>
-  );
-}
+    );
+  }
+);
+
+FileListItem.displayName = "FileListItem";
