@@ -146,9 +146,11 @@ export default function Workspace() {
     
     if (whisperHash && pageDimensions[displayPage]) {
       const dims = pageDimensions[displayPage];
+      const targetWidth = Math.round(dims.width);
+      const targetHeight = Math.round(dims.height);
       try {
         console.log("[Workspace] Calling highlight for line:", lineIndex, "page (1-based):", displayPage);
-        const rect = await apiHighlight(whisperHash, lineIndex, dims.width, dims.height);
+        const rect = await apiHighlight(whisperHash, lineIndex, targetWidth, targetHeight);
         console.log("[Workspace] Got highlight rect:", rect);
         
         // API returns 0-based page, convert to 1-based for PDF.js
