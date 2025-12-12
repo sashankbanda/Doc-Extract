@@ -271,18 +271,18 @@ export default function Workspace() {
   // Highlight a specific line id (0-based) using existing highlight API
   const highlightLineById = useCallback(
     async (lineIndex: number) => {
-      if (lineIndex == null || lineIndex < 0) return;
+      if (lineIndex == null || lineIndex < 0) {
+        throw new Error(`Invalid line index: ${lineIndex}`);
+      }
       const meta = lineMetadata?.[lineIndex];
       if (!meta || !Array.isArray(meta) || meta.length < 4) {
-        console.warn("[Workspace] No line metadata for index", lineIndex);
-        return;
+        throw new Error(`No line metadata for index ${lineIndex}`);
       }
       const pageZeroBased = meta[0] || 0;
       const displayPage = pageZeroBased + 1; // viewer uses 1-based
       const dims = pageDimensions[displayPage];
       if (!dims) {
-        console.warn("[Workspace] Missing page dimensions for page", displayPage);
-        return;
+        throw new Error(`Missing page dimensions for page ${displayPage}`);
       }
       try {
         const rect = await apiHighlight(
@@ -300,8 +300,10 @@ export default function Workspace() {
           page: pdfPage
         });
         setTimeout(() => setActiveBoundingBox(null), 3000);
-      } catch (err) {
-        console.error("[Workspace] Highlight error from structured view:", err);
+      } catch (err: any) {
+        // Re-throw with more context so Promise.allSettled can catch it
+        const errorMessage = err?.message || String(err) || "Unknown error";
+        throw new Error(`Failed to highlight line ${lineIndex}: ${errorMessage}`);
       }
     },
     [lineMetadata, pageDimensions, whisperHash]
@@ -310,13 +312,44 @@ export default function Workspace() {
   const handleStructuredHighlight = useCallback(
     async (lineIds: number[]) => {
       if (!lineIds || lineIds.length === 0) return;
-      // Try first valid id
-      for (const id of lineIds) {
-        if (typeof id === "number" && id >= 0) {
-          await highlightLineById(id);
-          break;
-        }
+      
+      // Filter valid line IDs
+      const validIds = lineIds.filter(id => typeof id === "number" && id >= 0);
+      if (validIds.length === 0) {
+        console.warn("[Workspace] No valid line IDs provided for highlighting");
+        return;
       }
+
+      // Process all line IDs with Promise.allSettled to handle errors gracefully
+      const results = await Promise.allSettled(
+        validIds.map(id => highlightLineById(id))
+      );
+
+      // Collect successful results and log failures
+      const successful: number[] = [];
+      const failed: Array<{ id: number; reason: string }> = [];
+
+      results.forEach((result, index) => {
+        const lineId = validIds[index];
+        if (result.status === "fulfilled") {
+          successful.push(lineId);
+        } else {
+          const reason = result.reason?.message || String(result.reason) || "Unknown error";
+          failed.push({ id: lineId, reason });
+          console.warn(`[Workspace] Failed to highlight line ${lineId}:`, reason);
+        }
+      });
+
+      // Log summary
+      if (successful.length > 0) {
+        console.log(`[Workspace] Successfully highlighted ${successful.length} line(s):`, successful);
+      }
+      if (failed.length > 0) {
+        console.warn(`[Workspace] Failed to highlight ${failed.length} line(s):`, failed);
+      }
+
+      // If no lines succeeded, we've already logged warnings above
+      // The first successful highlight will be shown (handled by highlightLineById)
     },
     [highlightLineById]
   );

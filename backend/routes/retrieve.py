@@ -32,7 +32,12 @@ async def retrieve_result(whisper_hash: str = Query(..., description="The unique
             # If API fails or 404, propagate error
             raise HTTPException(status_code=404, detail=f"Result not found or API error: {str(e)}")
 
-    # 5. Return filtered response
+    # 5. Save raw text output as .txt file (runs for both cache hits and API fetches)
+    result_text = data.get("result_text")
+    if result_text:
+        file_store.save_text_output(whisper_hash, result_text)
+
+    # 6. Return filtered response
     # Ensure specific fields are returned as requested
     filtered_response = {
         "result_text": data.get("result_text"),

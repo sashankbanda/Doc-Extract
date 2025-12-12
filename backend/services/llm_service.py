@@ -24,48 +24,69 @@ class LLMService:
 
     def _build_system_prompt(self) -> str:
         return (
-            "You extract data from a Loss Run Report. "
-            "Return ONLY valid JSON with the following structure:\n"
+            "You are an expert insurance document extraction AI. Your goal is to extract **ALL** data from the Loss Run Report into a structured JSON format.\n\n"
+            "**1. Extraction Rules:**\n\n"
+            "- **Main Claims Table:** Extract every row. Map *every* visible column to the closest Canonical Key below. Do not ignore columns like \"Notification Date\", \"Cause\", or \"Coverage\".\n\n"
+            "- **Multiline Text:** Text in columns like \"Description\" or \"Claimant\" often spans multiple lines. **Merge all lines** belonging to the same row entry into a single string.\n\n"
+            "- **Secondary Tables:** Look for summary tables (e.g., \"Policy Period Totals\", \"Financial Summary\"). Extract them into the `policy_period_summary` section.\n\n"
+            "**2. Canonical Keys & Synonyms (Use these keys for the JSON):**\n\n"
+            "- `claimNumber`: Claim No, Claim #, File Number\n"
+            "- `policyNumber`: Policy No, Policy # (Capture this even if inside the claims table)\n"
+            "- `claimant`: Claimant Name, Injured Worker\n"
+            "- `dateOfLoss`: Loss Date, Accident Date, Occurrence Date\n"
+            "- `reportedDate`: Notification Date, Date Reported, Report Date\n"
+            "- `claimStatus`: Status, Open/Closed\n"
+            "- `lossDescription`: Description, Accident Description, Desc\n"
+            "- `coverageSection`: Coverage, Cov Section, LOB, Div\n"
+            "- `causeOfLoss`: Cause, Cause Description, Injury Code\n"
+            "- `totalPaid`: Total Paid, Gross Paid, Total Gross Incurred\n"
+            "- `paidAlae`: Paid ALAE, Paid Expense, Legal Paid\n"
+            "- `totalIncurred`: Total Incurred, Incurred Loss\n"
+            "- `totalReserves`: Total Reserves, Outstanding\n\n"
+            "**3. Output JSON Structure:**\n\n"
+            "Return valid JSON with this exact structure:\n"
             "{\n"
             '  "data": {\n'
-            '    "policy_info": {\n'
-            '      "policy_number": string | null,\n'
-            '      "insured_name": string | null,\n'
-            '      "policy_term": {"start": string | null, "end": string | null},\n'
-            '      "division": string | null,\n'
-            '      "pac": string | null,\n'
-            '      "master_producer": string | null\n'
+            '    "report_info": {\n'
+            '        "insured": string,\n'
+            '        "run_date": string,\n'
+            '        "policy_number_header": string\n'
             "    },\n"
             '    "claims": [\n'
             "      {\n"
-            '        "claim_number": string | null,\n'
-            '        "claimant": string | null,\n'
-            '        "status": string | null,\n'
-            '        "description": string | null,\n'
-            '        "dates": {"event": string | null, "report": string | null, "closed": string | null},\n'
-            '        "amounts": {"paid": number | null, "expense": number | null, "outstanding": number | null, "incurred": number | null}\n'
+            '        "claimNumber": string,\n'
+            '        "policyNumber": string, // The policy # listed IN THE ROW\n'
+            '        "dateOfLoss": string,\n'
+            '        "reportedDate": string,\n'
+            '        "claimStatus": string,\n'
+            '        "claimant": string,\n'
+            '        "lossDescription": string,\n'
+            '        "coverageSection": string,\n'
+            '        "causeOfLoss": string,\n'
+            '        "totalPaid": number,\n'
+            '        "paidAlae": number,\n'
+            '        "totalReserves": number\n'
             "      }\n"
             "    ],\n"
-            '    "totals": {\n'
-            '      "subtotal": {"paid": number | null, "expense": number | null, "outstanding": number | null, "incurred": number | null},\n'
-            '      "grand_total": {"paid": number | null, "expense": number | null, "outstanding": number | null, "incurred": number | null}\n'
-            "    },\n"
-            '    "report_info": {\n'
-            '      "report_date": string | null,\n'
-            '      "as_of_date": string | null,\n'
-            '      "version": string | null\n'
+            '    "policy_period_summary": {\n'
+            '       "periods": [\n'
+            '          { "policy_period": string, "policy_number": string, "claim_count": number, "total_paid": number }\n'
+            "       ]\n"
             "    }\n"
             "  },\n"
             '  "_source_refs": {\n'
-            '    "policy_info.policy_number": [int, ...],\n'
-            '    "claims[0].claim_number": [int, ...],\n'
+            '    "data.report_info.insured": [1],\n'
+            '    "data.claims[0].claimNumber": [15],\n'
             "    ...\n"
             "  }\n"
-            "}\n"
+            "}\n\n"
+            "**Important:**\n\n"
+            "- If a column exists in the document (like \"Notification Date\"), you MUST map it.\n"
+            "- `_source_refs` are mandatory for highlighting.\n"
             "- The raw text contains line numbers in square brackets (e.g., [10]). "
-            "_source_refs MUST list the line numbers used for every populated field. "
-            "- Keep strictly to JSON. Do not add comments or extra keys. "
-            "- If a field is not present, set it to null and omit the _source_refs entry."
+            "_source_refs MUST list the line numbers used for every populated field.\n"
+            "- Keep strictly to JSON. Do not add comments or extra keys.\n"
+            "- If a field is not present, omit it or set to null."
         )
 
     async def structure_document(
@@ -79,7 +100,7 @@ class LLMService:
             {
                 "role": "user",
                 "content": (
-                    "Structure the following Loss Run Report text. "
+                    "Extract data from the following document text. "
                     "Text includes line numbers like [12]. Use them in _source_refs.\n\n"
                     f"{raw_text}"
                 ),
@@ -104,7 +125,16 @@ class LLMService:
             else:
                 raise
 
-        data = parsed.get("data", {})
+        # Handle new structure: summary and claims at top level, or wrapped in "data"
+        if "data" in parsed:
+            data = parsed["data"]
+        else:
+            # If no "data" wrapper, assume summary and claims are at top level
+            data = {
+                "summary": parsed.get("summary", {}),
+                "claims": parsed.get("claims", []),
+            }
+        
         source_refs = parsed.get("_source_refs", {})
         highlight_data = self._build_highlight_data(source_refs, line_metadata)
 

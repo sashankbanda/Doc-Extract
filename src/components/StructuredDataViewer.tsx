@@ -53,284 +53,150 @@ function HighlightValue({
   );
 }
 
+/**
+ * Converts camelCase or snake_case keys to a human-readable format.
+ * Examples: "policyNumber" -> "Policy Number", "claim_number" -> "Claim Number"
+ */
+function formatKey(key: string): string {
+  // Handle camelCase: insert space before capital letters
+  const camelCaseFormatted = key.replace(/([a-z])([A-Z])/g, "$1 $2");
+  // Handle snake_case: replace underscores with spaces
+  const snakeCaseFormatted = camelCaseFormatted.replace(/_/g, " ");
+  // Capitalize first letter of each word
+  return snakeCaseFormatted
+    .split(" ")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
+/**
+ * Formats a value for display, handling nested objects and arrays.
+ */
+function formatValue(value: any): string {
+  if (value === null || value === undefined) {
+    return "—";
+  }
+  if (typeof value === "object") {
+    if (Array.isArray(value)) {
+      return value.length > 0 ? value.join(", ") : "—";
+    }
+    // For nested objects, show a summary or stringify
+    return JSON.stringify(value);
+  }
+  if (typeof value === "number") {
+    // Format numbers with commas for thousands
+    return value.toLocaleString();
+  }
+  return String(value);
+}
+
+/**
+ * Checks if a value should be right-aligned (typically numbers)
+ */
+function isNumericValue(value: any): boolean {
+  return typeof value === "number" || (typeof value === "string" && /^-?\d+\.?\d*$/.test(value.trim()));
+}
+
 const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({ data, sourceRefs, onHighlight }) => {
-  const policy = data?.policy_info || {};
+  const summary = data?.summary || {};
   const claims: any[] = Array.isArray(data?.claims) ? data.claims : [];
-  const totals = data?.totals || {};
+
+  // Get all keys from summary, filtering out null/undefined values
+  const summaryKeys = Object.keys(summary).filter((key) => {
+    const value = summary[key];
+    return value !== null && value !== undefined && value !== "";
+  });
+
+  // Get column keys from the first claim object (if claims exist)
+  const claimColumns: string[] = claims.length > 0 ? Object.keys(claims[0]) : [];
 
   return (
     <div className="space-y-6">
-      {/* Policy Info */}
-      <div className={sectionCard}>
-        <h3 className="text-sm font-semibold mb-3">Policy Info</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-          <div className="flex flex-col">
-            <span className="text-muted-foreground">Policy Number</span>
-            <HighlightValue path="data.policy_info.policy_number" sourceRefs={sourceRefs} onHighlight={onHighlight}>
-              {policy.policy_number || "—"}
-            </HighlightValue>
-          </div>
-          <div className="flex flex-col">
-            <span className="text-muted-foreground">Insured Name</span>
-            <HighlightValue path="data.policy_info.insured_name" sourceRefs={sourceRefs} onHighlight={onHighlight}>
-              {policy.insured_name || "—"}
-            </HighlightValue>
-          </div>
-          <div className="flex flex-col">
-            <span className="text-muted-foreground">Policy Term Start</span>
-            <HighlightValue path="data.policy_info.policy_term.start" sourceRefs={sourceRefs} onHighlight={onHighlight}>
-              {policy?.policy_term?.start || "—"}
-            </HighlightValue>
-          </div>
-          <div className="flex flex-col">
-            <span className="text-muted-foreground">Policy Term End</span>
-            <HighlightValue path="data.policy_info.policy_term.end" sourceRefs={sourceRefs} onHighlight={onHighlight}>
-              {policy?.policy_term?.end || "—"}
-            </HighlightValue>
-          </div>
-          <div className="flex flex-col">
-            <span className="text-muted-foreground">Division</span>
-            <HighlightValue path="data.policy_info.division" sourceRefs={sourceRefs} onHighlight={onHighlight}>
-              {policy.division || "—"}
-            </HighlightValue>
-          </div>
-          <div className="flex flex-col">
-            <span className="text-muted-foreground">PAC</span>
-            <HighlightValue path="data.policy_info.pac" sourceRefs={sourceRefs} onHighlight={onHighlight}>
-              {policy.pac || "—"}
-            </HighlightValue>
-          </div>
-          <div className="flex flex-col">
-            <span className="text-muted-foreground">Master Producer</span>
-            <HighlightValue path="data.policy_info.master_producer" sourceRefs={sourceRefs} onHighlight={onHighlight}>
-              {policy.master_producer || "—"}
-            </HighlightValue>
+      {/* Summary Section - Dynamic */}
+      {summaryKeys.length > 0 && (
+        <div className={sectionCard}>
+          <h3 className="text-sm font-semibold mb-3">Summary</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+            {summaryKeys.map((key) => {
+              const value = summary[key];
+              const path = `summary.${key}`;
+              return (
+                <div key={key} className="flex flex-col">
+                  <span className="text-muted-foreground">{formatKey(key)}</span>
+                  <HighlightValue path={path} sourceRefs={sourceRefs} onHighlight={onHighlight}>
+                    {formatValue(value)}
+                  </HighlightValue>
+                </div>
+              );
+            })}
           </div>
         </div>
-      </div>
+      )}
 
-      {/* Claims */}
-      <div className={sectionCard}>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold">Claims</h3>
-          <span className="text-xs text-muted-foreground">{claims.length} rows</span>
-        </div>
-        <div className="overflow-auto">
-          <table className="w-full text-sm border-collapse">
-            <thead>
-              <tr className="bg-muted/50 text-xs text-muted-foreground">
-                <th className="text-left px-3 py-2 font-medium">Claim #</th>
-                <th className="text-left px-3 py-2 font-medium">Claimant</th>
-                <th className="text-left px-3 py-2 font-medium">Status</th>
-                <th className="text-left px-3 py-2 font-medium">Description</th>
-                <th className="text-left px-3 py-2 font-medium">Event Date</th>
-                <th className="text-left px-3 py-2 font-medium">Report Date</th>
-                <th className="text-left px-3 py-2 font-medium">Closed Date</th>
-                <th className="text-right px-3 py-2 font-medium">Paid</th>
-                <th className="text-right px-3 py-2 font-medium">Expense</th>
-                <th className="text-right px-3 py-2 font-medium">Outstanding</th>
-                <th className="text-right px-3 py-2 font-medium">Incurred</th>
-              </tr>
-            </thead>
-            <tbody>
-              {claims.length === 0 && (
-                <tr>
-                  <td className="px-3 py-3 text-muted-foreground text-center" colSpan={11}>
-                    No claims found.
-                  </td>
+      {/* Claims Section - Dynamic */}
+      {claims.length > 0 && (
+        <div className={sectionCard}>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold">Claims</h3>
+            <span className="text-xs text-muted-foreground">{claims.length} {claims.length === 1 ? "row" : "rows"}</span>
+          </div>
+          <div className="overflow-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="bg-muted/50 text-xs text-muted-foreground">
+                  {claimColumns.map((colKey) => (
+                    <th
+                      key={colKey}
+                      className={cn(
+                        "text-left px-3 py-2 font-medium",
+                        isNumericValue(claims[0]?.[colKey]) && "text-right"
+                      )}
+                    >
+                      {formatKey(colKey)}
+                    </th>
+                  ))}
                 </tr>
-              )}
-              {claims.map((claim, idx) => (
-                <tr key={idx} className="border-t border-border/50">
-                  <td className="px-3 py-2">
-                    <HighlightValue
-                      path={`data.claims[${idx}].claim_number`}
-                      sourceRefs={sourceRefs}
-                      onHighlight={onHighlight}
-                    >
-                      {claim.claim_number || "—"}
-                    </HighlightValue>
-                  </td>
-                  <td className="px-3 py-2">
-                    <HighlightValue
-                      path={`data.claims[${idx}].claimant`}
-                      sourceRefs={sourceRefs}
-                      onHighlight={onHighlight}
-                    >
-                      {claim.claimant || "—"}
-                    </HighlightValue>
-                  </td>
-                  <td className="px-3 py-2">
-                    <HighlightValue
-                      path={`data.claims[${idx}].status`}
-                      sourceRefs={sourceRefs}
-                      onHighlight={onHighlight}
-                    >
-                      {claim.status || "—"}
-                    </HighlightValue>
-                  </td>
-                  <td className="px-3 py-2 max-w-[220px]">
-                    <HighlightValue
-                      path={`data.claims[${idx}].description`}
-                      sourceRefs={sourceRefs}
-                      onHighlight={onHighlight}
-                    >
-                      {claim.description || "—"}
-                    </HighlightValue>
-                  </td>
-                  <td className="px-3 py-2">
-                    <HighlightValue
-                      path={`data.claims[${idx}].dates.event`}
-                      sourceRefs={sourceRefs}
-                      onHighlight={onHighlight}
-                    >
-                      {claim?.dates?.event || "—"}
-                    </HighlightValue>
-                  </td>
-                  <td className="px-3 py-2">
-                    <HighlightValue
-                      path={`data.claims[${idx}].dates.report`}
-                      sourceRefs={sourceRefs}
-                      onHighlight={onHighlight}
-                    >
-                      {claim?.dates?.report || "—"}
-                    </HighlightValue>
-                  </td>
-                  <td className="px-3 py-2">
-                    <HighlightValue
-                      path={`data.claims[${idx}].dates.closed`}
-                      sourceRefs={sourceRefs}
-                      onHighlight={onHighlight}
-                    >
-                      {claim?.dates?.closed || "—"}
-                    </HighlightValue>
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    <HighlightValue
-                      path={`data.claims[${idx}].amounts.paid`}
-                      sourceRefs={sourceRefs}
-                      onHighlight={onHighlight}
-                    >
-                      {claim?.amounts?.paid ?? "—"}
-                    </HighlightValue>
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    <HighlightValue
-                      path={`data.claims[${idx}].amounts.expense`}
-                      sourceRefs={sourceRefs}
-                      onHighlight={onHighlight}
-                    >
-                      {claim?.amounts?.expense ?? "—"}
-                    </HighlightValue>
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    <HighlightValue
-                      path={`data.claims[${idx}].amounts.outstanding`}
-                      sourceRefs={sourceRefs}
-                      onHighlight={onHighlight}
-                    >
-                      {claim?.amounts?.outstanding ?? "—"}
-                    </HighlightValue>
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    <HighlightValue
-                      path={`data.claims[${idx}].amounts.incurred`}
-                      sourceRefs={sourceRefs}
-                      onHighlight={onHighlight}
-                    >
-                      {claim?.amounts?.incurred ?? "—"}
-                    </HighlightValue>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {claims.map((claim, idx) => (
+                  <tr key={idx} className="border-t border-border/50">
+                    {claimColumns.map((colKey) => {
+                      const value = claim[colKey];
+                      const path = `claims[${idx}].${colKey}`;
+                      const isNumeric = isNumericValue(value);
+                      return (
+                        <td
+                          key={colKey}
+                          className={cn(
+                            "px-3 py-2",
+                            isNumeric && "text-right",
+                            colKey.toLowerCase().includes("description") && "max-w-[220px]"
+                          )}
+                        >
+                          <HighlightValue path={path} sourceRefs={sourceRefs} onHighlight={onHighlight}>
+                            {formatValue(value)}
+                          </HighlightValue>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Totals */}
-      <div className={sectionCard}>
-        <h3 className="text-sm font-semibold mb-3">Totals</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-          <div className="space-y-2">
-            <div className="text-xs font-semibold text-muted-foreground">Subtotal</div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="flex justify-between">
-                <span>Paid</span>
-                <HighlightValue path="data.totals.subtotal.paid" sourceRefs={sourceRefs} onHighlight={onHighlight}>
-                  {totals?.subtotal?.paid ?? "—"}
-                </HighlightValue>
-              </div>
-              <div className="flex justify-between">
-                <span>Expense</span>
-                <HighlightValue path="data.totals.subtotal.expense" sourceRefs={sourceRefs} onHighlight={onHighlight}>
-                  {totals?.subtotal?.expense ?? "—"}
-                </HighlightValue>
-              </div>
-              <div className="flex justify-between">
-                <span>Outstanding</span>
-                <HighlightValue
-                  path="data.totals.subtotal.outstanding"
-                  sourceRefs={sourceRefs}
-                  onHighlight={onHighlight}
-                >
-                  {totals?.subtotal?.outstanding ?? "—"}
-                </HighlightValue>
-              </div>
-              <div className="flex justify-between">
-                <span>Incurred</span>
-                <HighlightValue path="data.totals.subtotal.incurred" sourceRefs={sourceRefs} onHighlight={onHighlight}>
-                  {totals?.subtotal?.incurred ?? "—"}
-                </HighlightValue>
-              </div>
-            </div>
-          </div>
-          <div className="space-y-2">
-            <div className="text-xs font-semibold text-muted-foreground">Grand Total</div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="flex justify-between">
-                <span>Paid</span>
-                <HighlightValue path="data.totals.grand_total.paid" sourceRefs={sourceRefs} onHighlight={onHighlight}>
-                  {totals?.grand_total?.paid ?? "—"}
-                </HighlightValue>
-              </div>
-              <div className="flex justify-between">
-                <span>Expense</span>
-                <HighlightValue
-                  path="data.totals.grand_total.expense"
-                  sourceRefs={sourceRefs}
-                  onHighlight={onHighlight}
-                >
-                  {totals?.grand_total?.expense ?? "—"}
-                </HighlightValue>
-              </div>
-              <div className="flex justify-between">
-                <span>Outstanding</span>
-                <HighlightValue
-                  path="data.totals.grand_total.outstanding"
-                  sourceRefs={sourceRefs}
-                  onHighlight={onHighlight}
-                >
-                  {totals?.grand_total?.outstanding ?? "—"}
-                </HighlightValue>
-              </div>
-              <div className="flex justify-between">
-                <span>Incurred</span>
-                <HighlightValue
-                  path="data.totals.grand_total.incurred"
-                  sourceRefs={sourceRefs}
-                  onHighlight={onHighlight}
-                >
-                  {totals?.grand_total?.incurred ?? "—"}
-                </HighlightValue>
-              </div>
-            </div>
-          </div>
+      {/* Empty State */}
+      {summaryKeys.length === 0 && claims.length === 0 && (
+        <div className={sectionCard}>
+          <p className="text-sm text-muted-foreground text-center py-4">
+            No structured data found.
+          </p>
         </div>
-      </div>
+      )}
     </div>
   );
 };
 
 export default StructuredDataViewer;
-
