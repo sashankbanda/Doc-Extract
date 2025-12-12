@@ -10,9 +10,10 @@ export type FileType = "pdf" | "image" | "text" | "excel" | "docx" | "unknown";
 export function guessFileType(filename: string): FileType {
     const lower = filename.toLowerCase();
     if (lower.endsWith('.pdf')) return 'pdf';
-    if (lower.match(/\.(png|jpg|jpeg|gif|bmp|webp)$/)) return 'image';
-    if (lower.match(/\.(txt|md|log|json|csv)$/)) return 'text';
-    if (lower.match(/\.(xls|xlsx)$/)) return 'excel';
+    if (lower.match(/\.(png|jpg|jpeg|gif|bmp|webp|tiff)$/)) return 'image';
+    if (lower.endsWith('.csv')) return 'excel'; // Treat CSV as Excel for table display
+    if (lower.match(/\.(txt|md|log|json)$/)) return 'text';
+    if (lower.match(/\.(xls|xlsx|ods)$/)) return 'excel';
     if (lower.match(/\.(doc|docx)$/)) return 'docx';
     return 'unknown';
 }
@@ -172,14 +173,30 @@ const ExcelViewer = ({ fileUrl }: { fileUrl: string }) => {
     useEffect(() => {
         const load = async () => {
             try {
-                const f = await fetch(fileUrl);
-                const ab = await f.arrayBuffer();
-                const wb = XLSX.read(ab, { type: 'array' });
-                const ws = wb.Sheets[wb.SheetNames[0]]; // First sheet
-                const json = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
-                setData(json);
+                const isCsv = fileUrl.toLowerCase().endsWith('.csv');
+                
+                if (isCsv) {
+                    // Handle CSV files - fetch as text and parse
+                    const f = await fetch(fileUrl);
+                    const text = await f.text();
+                    // XLSX can parse CSV directly
+                    const wb = XLSX.read(text, { type: 'string', FS: ',' });
+                    const ws = wb.Sheets[wb.SheetNames[0]] || wb.Sheets[Object.keys(wb.Sheets)[0]];
+                    const json = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }) as any[][];
+                    setData(json);
+                } else {
+                    // Handle Excel files (.xlsx, .xls, .ods)
+                    const f = await fetch(fileUrl);
+                    const ab = await f.arrayBuffer();
+                    const wb = XLSX.read(ab, { type: 'array' });
+                    const ws = wb.Sheets[wb.SheetNames[0]]; // First sheet
+                    const json = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }) as any[][];
+                    setData(json);
+                }
             } catch (e) {
-                console.error("Excel load error", e);
+                console.error("Excel/CSV load error", e);
+                // Fallback: try to show error message
+                setData([['Error loading file. Please check the console for details.']]);
             }
         };
         load();

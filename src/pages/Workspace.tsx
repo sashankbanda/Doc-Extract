@@ -11,6 +11,7 @@ import { StructuredTablePanel } from "@/components/workspace/StructuredTablePane
 import { TemplateFieldsPanel } from "@/components/workspace/TemplateFieldsPanel";
 import { BoundingBox, LayoutText, ExtractedTable, ExtractedField } from "@/types/document";
 import { apiRetrieve, apiHighlight, API_BASE } from "@/lib/api";
+import DocumentViewer, { guessFileType } from "@/components/DocumentViewer";
 
 type TabType = "text" | "tables" | "fields";
 
@@ -304,19 +305,30 @@ export default function Workspace() {
     );
   }
 
-  const pdfUrl = `${API_BASE}/document/${whisperHash}`;
+  const documentUrl = `${API_BASE}/document/${whisperHash}`;
+  const fileType = guessFileType(fileName);
+  const isPdf = fileType === 'pdf';
 
   return (
     <div className="min-h-screen pt-16">
       <TwoPaneLayout
         leftPane={
-          <PDFViewerWrapper
-            documentId={whisperHash}
-            pdfUrl={pdfUrl}
-            highlights={allHighlights}
-            activeHighlight={activeBoundingBox}
-            onPageDimensions={handlePageDimensions}
-          />
+          isPdf ? (
+            <PDFViewerWrapper
+              documentId={whisperHash}
+              pdfUrl={documentUrl}
+              highlights={allHighlights}
+              activeHighlight={activeBoundingBox}
+              onPageDimensions={handlePageDimensions}
+            />
+          ) : (
+            <DocumentViewer
+              fileUrl={documentUrl}
+              fileType={fileType}
+              highlights={allHighlights}
+              onPageDimensions={handlePageDimensions}
+            />
+          )
         }
         rightPane={
           <div className="h-full flex flex-col">

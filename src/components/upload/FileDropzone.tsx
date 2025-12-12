@@ -27,15 +27,65 @@ export function FileDropzone({ onFilesAdded, disabled }: FileDropzoneProps) {
     setIsDragOver(false);
     if (disabled) return;
 
-    const files = Array.from(e.dataTransfer.files).filter(
-      (file) => file.type === "application/pdf"
-    );
+    // Accept multiple file types: PDF, images, Excel, CSV, Office docs
+    const acceptedTypes = [
+      'application/pdf',
+      'image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/bmp', 'image/webp', 'image/tiff',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+      'application/vnd.ms-excel', // .xls
+      'text/csv', 'application/vnd.ms-excel.sheet.macroEnabled.12',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
+      'application/msword', // .doc
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation', // .pptx
+      'text/plain'
+    ];
+    
+    const files = Array.from(e.dataTransfer.files).filter((file) => {
+      // Check by MIME type or file extension
+      const lowerName = file.name.toLowerCase();
+      const hasValidExtension = 
+        lowerName.endsWith('.pdf') ||
+        lowerName.match(/\.(png|jpg|jpeg|gif|bmp|webp|tiff)$/) ||
+        lowerName.match(/\.(xlsx|xls|ods)$/) ||
+        lowerName.endsWith('.csv') ||
+        lowerName.match(/\.(docx|doc|pptx)$/) ||
+        lowerName.match(/\.(txt|md|log|json)$/);
+      
+      return acceptedTypes.includes(file.type) || hasValidExtension;
+    });
     if (files.length > 0) onFilesAdded(files);
   }, [onFilesAdded, disabled]);
 
   const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files ? Array.from(e.target.files) : [];
-    if (files.length > 0) onFilesAdded(files);
+    
+    // Filter files by type/extension (same logic as handleDrop)
+    const acceptedTypes = [
+      'application/pdf',
+      'image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/bmp', 'image/webp', 'image/tiff',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+      'application/vnd.ms-excel', // .xls
+      'text/csv', 'application/vnd.ms-excel.sheet.macroEnabled.12',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
+      'application/msword', // .doc
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation', // .pptx
+      'text/plain'
+    ];
+    
+    const filteredFiles = files.filter((file) => {
+      const lowerName = file.name.toLowerCase();
+      const hasValidExtension = 
+        lowerName.endsWith('.pdf') ||
+        lowerName.match(/\.(png|jpg|jpeg|gif|bmp|webp|tiff)$/) ||
+        lowerName.match(/\.(xlsx|xls|ods)$/) ||
+        lowerName.endsWith('.csv') ||
+        lowerName.match(/\.(docx|doc|pptx)$/) ||
+        lowerName.match(/\.(txt|md|log|json)$/);
+      
+      return acceptedTypes.includes(file.type) || hasValidExtension;
+    });
+    
+    if (filteredFiles.length > 0) onFilesAdded(filteredFiles);
     e.target.value = "";
   }, [onFilesAdded]);
 
@@ -69,7 +119,7 @@ export function FileDropzone({ onFilesAdded, disabled }: FileDropzoneProps) {
 
       <input
         type="file"
-        accept=".pdf,application/pdf"
+        accept=".pdf,.png,.jpg,.jpeg,.gif,.bmp,.webp,.tiff,.xlsx,.xls,.ods,.csv,.docx,.doc,.pptx,.txt,.md,.log,.json,application/pdf,image/*,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword,text/plain"
         multiple
         onChange={handleFileInput}
         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
@@ -88,14 +138,14 @@ export function FileDropzone({ onFilesAdded, disabled }: FileDropzoneProps) {
       </motion.div>
 
       <h3 className="text-lg font-semibold text-foreground mb-2">
-        {isDragOver ? "Drop your files here" : "Drag & drop your PDFs"}
+        {isDragOver ? "Drop your files here" : "Drag & drop your documents"}
       </h3>
       <p className="text-sm text-muted-foreground mb-4">
         or click to browse from your device
       </p>
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <FileText className="w-4 h-4" />
-        <span>PDF files only, up to 50MB each</span>
+        <span>PDF, Images, Excel, CSV, Word, PowerPoint, Text files - up to 50MB each</span>
       </div>
     </motion.div>
   );

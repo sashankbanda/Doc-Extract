@@ -32,8 +32,8 @@ def select_mode(file_path: str, user_override: str = None) -> str:
     if 'form' in filename:
         return "form"
 
-    # Spreadsheets
-    if ext in ['.xlsx', '.xls', '.ods']:
+    # Spreadsheets (including CSV)
+    if ext in ['.xlsx', '.xls', '.ods', '.csv']:
         return "table"
         
     # Images and Office Docs
