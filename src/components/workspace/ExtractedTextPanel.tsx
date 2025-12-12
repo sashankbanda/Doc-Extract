@@ -46,9 +46,11 @@ export function ExtractedTextPanel({
                 <span className="text-xs text-muted-foreground uppercase tracking-wider mb-1 block">
                   {item.type}
                 </span>
-                <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap font-mono">
-                  {item.text}
-                </p>
+                <div className="overflow-x-auto -mx-4 px-4">
+                  <p className="text-sm text-foreground leading-relaxed whitespace-pre font-mono" style={{ minWidth: 'max-content' }}>
+                    {item.text}
+                  </p>
+                </div>
               </div>
             </div>
           </motion.div>

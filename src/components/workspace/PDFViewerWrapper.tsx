@@ -152,9 +152,10 @@ export function PDFViewerWrapper({
         style={{ backgroundColor: "hsl(var(--muted) / 0.3)" }}
       >
         {pdfDoc ? (
-          <div className="flex flex-col items-center gap-4">
+          <div className="flex flex-col items-center gap-4" style={{ minWidth: 'max-content', width: '100%' }}>
             {Array.from({ length: totalPages }, (_, i) => {
               const pageNum = i + 1;
+              const dims = canvasDimensions.get(pageNum);
               return (
                 <motion.div
                   key={pageNum}
@@ -163,12 +164,16 @@ export function PDFViewerWrapper({
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ duration: 0.3, delay: i * 0.1 }}
+                  style={{
+                    minWidth: dims?.width ? `${dims.width}px` : 'auto',
+                    minHeight: dims?.height ? `${dims.height}px` : 'auto'
+                  }}
                 >
                   <div 
                     className="relative inline-block"
                     style={{ 
-                      width: canvasDimensions.get(pageNum)?.width ? `${canvasDimensions.get(pageNum)!.width}px` : 'auto',
-                      height: canvasDimensions.get(pageNum)?.height ? `${canvasDimensions.get(pageNum)!.height}px` : 'auto'
+                      width: dims?.width ? `${dims.width}px` : 'auto',
+                      height: dims?.height ? `${dims.height}px` : 'auto'
                     }}
                   >
                     <canvas
@@ -183,8 +188,8 @@ export function PDFViewerWrapper({
                         highlights={highlights.filter(h => h.page === pageNum)}
                         activeHighlight={activeHighlight?.page === pageNum ? activeHighlight : null}
                         scale={zoom / 100}
-                        canvasWidth={canvasDimensions.get(pageNum)?.width || 0}
-                        canvasHeight={canvasDimensions.get(pageNum)?.height || 0}
+                        canvasWidth={dims?.width || 0}
+                        canvasHeight={dims?.height || 0}
                       />
                     )}
                   </div>

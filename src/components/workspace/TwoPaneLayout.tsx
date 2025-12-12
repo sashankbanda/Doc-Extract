@@ -23,7 +23,7 @@ export function TwoPaneLayout({
       </div>
 
       {/* Right Pane - Extracted Data */}
-      <div className="flex-1 glass rounded-2xl overflow-hidden">
+      <div className="flex-1 glass rounded-2xl overflow-hidden flex flex-col">
         {rightPane}
       </div>
     </div>

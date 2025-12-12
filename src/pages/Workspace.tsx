@@ -301,7 +301,7 @@ export default function Workspace() {
             </div>
 
             {/* Tab Content */}
-            <div className="flex-1 overflow-y-auto p-4">
+            <div className="flex-1 overflow-y-auto overflow-x-auto p-4">
               <AnimatePresence mode="wait">
                 <motion.div
                   key={activeTab}
@@ -309,6 +309,7 @@ export default function Workspace() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
                   transition={{ duration: 0.2 }}
+                  className="min-w-max"
                 >
                   {renderTabContent()}
                 </motion.div>
