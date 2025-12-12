@@ -29,10 +29,11 @@ app.add_middleware(
 async def health_check():
     return {"status": "ok"}
 
-from backend.routes import upload, retrieve, highlight, status, document
+from backend.routes import upload, retrieve, highlight, status, document, structure
 
 app.include_router(upload.router)
 app.include_router(retrieve.router)
 app.include_router(highlight.router)
 app.include_router(status.router)
 app.include_router(document.router)
+app.include_router(structure.router)

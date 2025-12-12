@@ -10,6 +10,10 @@ class Config:
     if not LLMWHISPERER_API_KEY:
         raise ValueError("LLMWHISPERER_API_KEY environment variable is not set.")
     
+    GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+    if not GROQ_API_KEY:
+        raise ValueError("GROQ_API_KEY environment variable is not set.")
+    
     LLMWHISPERER_BASE_URL_V2 = os.getenv("LLMWHISPERER_BASE_URL_V2", "https://llmwhisperer-api.us-central.unstract.com/api/v2")
     # Default CORS origins - include common dev ports
     default_cors = "http://localhost:3000,http://localhost:5173,http://localhost:8080"

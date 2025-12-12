@@ -1,8 +1,9 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { FileText, Table, Tag } from "lucide-react";
+import { FileText, Table, Tag, Sparkles, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { TwoPaneLayout } from "@/components/workspace/TwoPaneLayout";
 import { FileSelectorDropdown } from "@/components/workspace/FileSelectorDropdown";
 import { PDFViewerWrapper } from "@/components/workspace/PDFViewerWrapper";
@@ -10,7 +11,7 @@ import { ExtractedTextPanel } from "@/components/workspace/ExtractedTextPanel";
 import { StructuredTablePanel } from "@/components/workspace/StructuredTablePanel";
 import { TemplateFieldsPanel } from "@/components/workspace/TemplateFieldsPanel";
 import { BoundingBox, LayoutText, ExtractedTable, ExtractedField } from "@/types/document";
-import { apiRetrieve, apiHighlight, API_BASE } from "@/lib/api";
+import { apiRetrieve, apiHighlight, API_BASE, structureDocument, StructuredDataResponse } from "@/lib/api";
 import DocumentViewer, { guessFileType } from "@/components/DocumentViewer";
 
 type TabType = "text" | "tables" | "fields";
@@ -35,6 +36,9 @@ export default function Workspace() {
   const [hoveredBoundingBox, setHoveredBoundingBox] = useState<BoundingBox | null>(null);
   const [activeBoundingBox, setActiveBoundingBox] = useState<BoundingBox | null>(null);
   const [pageDimensions, setPageDimensions] = useState<Record<number, { width: number, height: number }>>({});
+  const [structuredData, setStructuredData] = useState<StructuredDataResponse | null>(null);
+  const [structureLoading, setStructureLoading] = useState<boolean>(false);
+  const [structureError, setStructureError] = useState<string | null>(null);
 
   const handlePageDimensions = useCallback((pageNum: number, width: number, height: number) => {
     setPageDimensions(prev => {
@@ -242,6 +246,23 @@ export default function Workspace() {
   // Collect all highlights
   const allHighlights = hoveredBoundingBox ? [hoveredBoundingBox] : [];
 
+  // Handle structure document
+  const handleStructureDocument = useCallback(async () => {
+    if (!whisperHash) return;
+    
+    setStructureLoading(true);
+    setStructureError(null);
+    try {
+      const data = await structureDocument(whisperHash);
+      setStructuredData(data);
+    } catch (err: any) {
+      console.error("[Workspace] Structure error:", err);
+      setStructureError(err.message || "Failed to structure document");
+    } finally {
+      setStructureLoading(false);
+    }
+  }, [whisperHash]);
+
   // Mock data for tables and fields (can be enhanced later)
   const mockTables: ExtractedTable[] = [];
   const mockFields: ExtractedField[] = [];
@@ -339,6 +360,26 @@ export default function Workspace() {
                 selectedId={whisperHash}
                 onSelect={() => {}}
               />
+              <Button
+                onClick={handleStructureDocument}
+                disabled={structureLoading || !resultText}
+                variant="outline"
+                size="sm"
+                className="gap-2"
+              >
+                {structureLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span className="hidden sm:inline">Analyzing...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4" />
+                    <span className="hidden sm:inline">Analyze with AI</span>
+                    <span className="sm:hidden">Analyze</span>
+                  </>
+                )}
+              </Button>
             </div>
 
             {/* Tabs */}
@@ -378,7 +419,41 @@ export default function Workspace() {
                   transition={{ duration: 0.2 }}
                   className="min-w-max"
                 >
-                  {renderTabContent()}
+                  {structuredData && activeTab === "text" ? (
+                    <div className="space-y-4">
+                      <div className="rounded-lg border border-border/50 bg-muted/30 p-4">
+                        <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                          <Sparkles className="w-4 h-4" />
+                          Structured Data
+                        </h3>
+                        <pre className="text-xs overflow-auto max-h-[600px] bg-background p-4 rounded border border-border/50">
+                          {JSON.stringify(structuredData.data, null, 2)}
+                        </pre>
+                      </div>
+                      <div className="border-t border-border/50 pt-4">
+                        <h4 className="text-sm font-medium mb-2">Raw Text</h4>
+                        {renderTabContent()}
+                      </div>
+                    </div>
+                  ) : structureError && activeTab === "text" ? (
+                    <div className="space-y-4">
+                      <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4">
+                        <h3 className="text-sm font-semibold text-destructive mb-2">Error</h3>
+                        <p className="text-sm text-destructive">{structureError}</p>
+                        <Button
+                          onClick={handleStructureDocument}
+                          variant="outline"
+                          size="sm"
+                          className="mt-2"
+                        >
+                          Retry
+                        </Button>
+                      </div>
+                      {renderTabContent()}
+                    </div>
+                  ) : (
+                    renderTabContent()
+                  )}
                 </motion.div>
               </AnimatePresence>
             </div>
