@@ -13,12 +13,13 @@ import { TemplateFieldsPanel } from "@/components/workspace/TemplateFieldsPanel"
 import { BoundingBox, LayoutText, ExtractedTable, ExtractedField } from "@/types/document";
 import { apiRetrieve, apiHighlight, API_BASE, structureDocument, StructuredDataResponse } from "@/lib/api";
 import DocumentViewer, { guessFileType } from "@/components/DocumentViewer";
+import StructuredDataViewer from "@/components/StructuredDataViewer";
 
 type TabType = "text" | "tables" | "fields";
 
 const tabs: { id: TabType; label: string; icon: typeof FileText }[] = [
-  { id: "text", label: "Layout Text", icon: FileText },
-  { id: "tables", label: "Tables", icon: Table },
+  { id: "text", label: "Raw Text", icon: FileText },
+  { id: "tables", label: "Structured Data", icon: Table },
   { id: "fields", label: "Fields", icon: Tag },
 ];
 
@@ -267,6 +268,59 @@ export default function Workspace() {
   const mockTables: ExtractedTable[] = [];
   const mockFields: ExtractedField[] = [];
 
+  // Highlight a specific line id (0-based) using existing highlight API
+  const highlightLineById = useCallback(
+    async (lineIndex: number) => {
+      if (lineIndex == null || lineIndex < 0) return;
+      const meta = lineMetadata?.[lineIndex];
+      if (!meta || !Array.isArray(meta) || meta.length < 4) {
+        console.warn("[Workspace] No line metadata for index", lineIndex);
+        return;
+      }
+      const pageZeroBased = meta[0] || 0;
+      const displayPage = pageZeroBased + 1; // viewer uses 1-based
+      const dims = pageDimensions[displayPage];
+      if (!dims) {
+        console.warn("[Workspace] Missing page dimensions for page", displayPage);
+        return;
+      }
+      try {
+        const rect = await apiHighlight(
+          whisperHash!,
+          lineIndex,
+          Math.round(dims.width),
+          Math.round(dims.height)
+        );
+        const pdfPage = rect.page + 1;
+        setActiveBoundingBox({
+          x: rect.x1,
+          y: rect.y1,
+          width: rect.x2 - rect.x1,
+          height: rect.y2 - rect.y1,
+          page: pdfPage
+        });
+        setTimeout(() => setActiveBoundingBox(null), 3000);
+      } catch (err) {
+        console.error("[Workspace] Highlight error from structured view:", err);
+      }
+    },
+    [lineMetadata, pageDimensions, whisperHash]
+  );
+
+  const handleStructuredHighlight = useCallback(
+    async (lineIds: number[]) => {
+      if (!lineIds || lineIds.length === 0) return;
+      // Try first valid id
+      for (const id of lineIds) {
+        if (typeof id === "number" && id >= 0) {
+          await highlightLineById(id);
+          break;
+        }
+      }
+    },
+    [highlightLineById]
+  );
+
   const renderTabContent = () => {
     switch (activeTab) {
       case "text":
@@ -279,11 +333,34 @@ export default function Workspace() {
         );
       case "tables":
         return (
-          <StructuredTablePanel
-            tables={mockTables}
-            onTableHover={handleItemHover}
-            onCellClick={handleItemClick}
-          />
+          <div className="space-y-4 min-w-[720px]">
+            {!structuredData && !structureError && (
+              <div className="text-sm text-muted-foreground">
+                Run “Analyze with AI” to view structured data.
+              </div>
+            )}
+            {structureError && (
+              <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4">
+                <div className="text-sm font-semibold text-destructive mb-2">Error</div>
+                <p className="text-sm text-destructive">{structureError}</p>
+                <Button
+                  onClick={handleStructureDocument}
+                  variant="outline"
+                  size="sm"
+                  className="mt-2"
+                >
+                  Retry
+                </Button>
+              </div>
+            )}
+            {structuredData && (
+              <StructuredDataViewer
+                data={structuredData.data}
+                sourceRefs={structuredData._source_refs}
+                onHighlight={handleStructuredHighlight}
+              />
+            )}
+          </div>
         );
       case "fields":
         return (
@@ -419,41 +496,7 @@ export default function Workspace() {
                   transition={{ duration: 0.2 }}
                   className="min-w-max"
                 >
-                  {structuredData && activeTab === "text" ? (
-                    <div className="space-y-4">
-                      <div className="rounded-lg border border-border/50 bg-muted/30 p-4">
-                        <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
-                          <Sparkles className="w-4 h-4" />
-                          Structured Data
-                        </h3>
-                        <pre className="text-xs overflow-auto max-h-[600px] bg-background p-4 rounded border border-border/50">
-                          {JSON.stringify(structuredData.data, null, 2)}
-                        </pre>
-                      </div>
-                      <div className="border-t border-border/50 pt-4">
-                        <h4 className="text-sm font-medium mb-2">Raw Text</h4>
-                        {renderTabContent()}
-                      </div>
-                    </div>
-                  ) : structureError && activeTab === "text" ? (
-                    <div className="space-y-4">
-                      <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4">
-                        <h3 className="text-sm font-semibold text-destructive mb-2">Error</h3>
-                        <p className="text-sm text-destructive">{structureError}</p>
-                        <Button
-                          onClick={handleStructureDocument}
-                          variant="outline"
-                          size="sm"
-                          className="mt-2"
-                        >
-                          Retry
-                        </Button>
-                      </div>
-                      {renderTabContent()}
-                    </div>
-                  ) : (
-                    renderTabContent()
-                  )}
+                  {renderTabContent()}
                 </motion.div>
               </AnimatePresence>
             </div>
