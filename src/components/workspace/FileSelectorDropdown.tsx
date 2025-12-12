@@ -1,18 +1,20 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronDown, FileText, Check } from "lucide-react";
+import { ChevronDown, FileText, Check, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface FileSelectorDropdownProps {
   files: { id: string; name: string }[];
   selectedId: string;
   onSelect: (id: string) => void;
+  onRemove?: (id: string) => void;
 }
 
 export function FileSelectorDropdown({
   files,
   selectedId,
   onSelect,
+  onRemove,
 }: FileSelectorDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
   const selectedFile = files.find((f) => f.id === selectedId);
@@ -54,26 +56,47 @@ export function FileSelectorDropdown({
               className="absolute top-full left-0 mt-2 w-full max-w-xs glass rounded-xl overflow-hidden z-50 shadow-xl"
             >
               {files.map((file) => (
-                <button
+                <div
                   key={file.id}
-                  onClick={() => {
-                    onSelect(file.id);
-                    setIsOpen(false);
-                  }}
                   className={cn(
-                    "flex items-center gap-3 px-4 py-3 w-full text-left text-sm",
+                    "flex items-center gap-2 px-4 py-3 w-full text-sm group",
                     "hover:bg-muted/50 transition-colors",
                     file.id === selectedId
                       ? "text-primary bg-primary/5"
                       : "text-foreground"
                   )}
                 >
-                  <FileText className="w-4 h-4" />
-                  <span className="truncate flex-1">{file.name}</span>
-                  {file.id === selectedId && (
-                    <Check className="w-4 h-4 text-primary" />
+                  <button
+                    onClick={() => {
+                      onSelect(file.id);
+                      setIsOpen(false);
+                    }}
+                    className="flex items-center gap-3 flex-1 text-left min-w-0"
+                  >
+                    <FileText className="w-4 h-4 flex-shrink-0" />
+                    <span className="truncate flex-1">{file.name}</span>
+                    {file.id === selectedId && (
+                      <Check className="w-4 h-4 text-primary flex-shrink-0" />
+                    )}
+                  </button>
+                  {onRemove && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onRemove(file.id);
+                        setIsOpen(false);
+                      }}
+                      className={cn(
+                        "p-1.5 rounded-md opacity-0 group-hover:opacity-100 transition-opacity",
+                        "hover:bg-destructive/10 hover:text-destructive",
+                        "text-muted-foreground flex-shrink-0"
+                      )}
+                      title="Delete file"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   )}
-                </button>
+                </div>
               ))}
             </motion.div>
           </>

@@ -6,12 +6,12 @@ import { GlassButton } from "@/components/ui/GlassButton";
 import { FileDropzone } from "@/components/upload/FileDropzone";
 import { FileListItem } from "@/components/upload/FileListItem";
 import { useDocumentContext, Document } from "@/context/DocumentContext";
-import { Upload, ArrowRight, FileText } from "lucide-react";
+import { Upload, ArrowRight, FileText, Trash2 } from "lucide-react";
 import { apiUpload, apiStatus } from "@/lib/api";
 
 export default function UploadPage() {
   const navigate = useNavigate();
-  const { documents, addDocument, updateDocumentStatus, removeDocument } = useDocumentContext();
+  const { documents, addDocument, updateDocumentStatus, removeDocument, clearDocuments } = useDocumentContext();
   const [isUploading, setIsUploading] = useState(false);
   const pollingIntervalsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
   const progressRef = useRef<Map<string, number>>(new Map()); // Track progress per document
@@ -225,6 +225,21 @@ export default function UploadPage() {
                   <FileText className="w-4 h-4 text-primary" />
                   Selected Files ({uploadDocuments.length})
                 </h3>
+                {documents.length > 0 && (
+                  <GlassButton
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      if (confirm("Are you sure you want to clear all files? This will reset your session.")) {
+                        clearDocuments();
+                      }
+                    }}
+                    className="gap-2 text-muted-foreground hover:text-destructive"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span className="hidden sm:inline">Clear All</span>
+                  </GlassButton>
+                )}
               </div>
 
               <AnimatePresence mode="popLayout">

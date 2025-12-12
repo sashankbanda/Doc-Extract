@@ -19,6 +19,7 @@ export interface DocumentContextType {
   removeDocument: (id: string) => void;
   updateDocumentStatus: (id: string, status: Document["status"], progress?: number, hash?: string) => void;
   setActiveDocument: (id: string) => void;
+  clearDocuments: () => void;
   dataCache: Record<string, any>; // In-memory cache for API results (raw text, structured data)
   cacheData: (hash: string, data: any) => void;
 }
@@ -219,6 +220,19 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
+  const clearDocuments = useCallback(() => {
+    console.log("[DocumentContext] Clearing all documents (factory reset)");
+    setDocuments([]);
+    setActiveDocumentIdState(null);
+    setDataCache({});
+    // Clear localStorage
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch (error) {
+      console.error("[DocumentContext] Failed to clear localStorage:", error);
+    }
+  }, []);
+
   const value: DocumentContextType = {
     documents,
     activeDocumentId,
@@ -226,6 +240,7 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
     removeDocument,
     updateDocumentStatus,
     setActiveDocument,
+    clearDocuments,
     dataCache,
     cacheData,
   };

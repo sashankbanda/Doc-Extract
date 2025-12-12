@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { FileText, Table, Tag, Sparkles, Loader2 } from "lucide-react";
+import { FileText, Table, Tag, Sparkles, Loader2, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { TwoPaneLayout } from "@/components/workspace/TwoPaneLayout";
@@ -27,7 +27,7 @@ const tabs: { id: TabType; label: string; icon: typeof FileText }[] = [
 export default function Workspace() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { documents, activeDocumentId, setActiveDocument, dataCache, cacheData } = useDocumentContext();
+  const { documents, activeDocumentId, setActiveDocument, dataCache, cacheData, removeDocument, clearDocuments } = useDocumentContext();
   
   // Get whisper_hash from URL
   const urlHash = searchParams.get("whisper_hash");
@@ -133,10 +133,13 @@ export default function Workspace() {
         setResultText(cachedData.result_text || "");
         setLineMetadata(cachedData.line_metadata || []);
         
-        // Also load cached structured data if available
+        // Also load cached structured data if available, otherwise clear it
         if (cachedData.structured) {
           console.log("[Workspace] Loading cached structured data");
           setStructuredData(cachedData.structured);
+        } else {
+          // Explicitly clear structured data if new file doesn't have it
+          setStructuredData(null);
         }
         
         setLoading(false);
@@ -162,6 +165,11 @@ export default function Workspace() {
         
         setResultText(data.result_text || "");
         setLineMetadata(data.line_metadata || []);
+        
+        // Clear structured data if not in cache (new file hasn't been analyzed yet)
+        if (!cachedData?.structured) {
+          setStructuredData(null);
+        }
       } catch (err: any) {
         console.error("[Workspace] Error fetching data:", err);
         setError(err.message);
@@ -562,33 +570,57 @@ export default function Workspace() {
         rightPane={
           <div className="h-full flex flex-col">
             {/* Header with file selector */}
-            <div className="flex items-center justify-between p-4 border-b border-border/50">
-              <FileSelectorDropdown
-                files={documents
-                  .filter((d) => d.status === "complete" && d.whisperHash)
-                  .map((d) => ({
-                    id: d.whisperHash!,
-                    name: d.fileName || d.name,
-                  }))}
-                selectedId={whisperHash || ""}
-                onSelect={(hash) => {
-                  // Find document by hash
-                  const doc = documents.find((d) => d.whisperHash === hash);
-                  if (doc) {
-                    setActiveDocument(doc.id);
-                    setSearchParams(
-                      { whisper_hash: hash, fileName: doc.fileName || doc.name },
-                      { replace: true }
-                    );
-                  }
-                }}
-              />
+            <div className="flex items-center justify-between p-4 border-b border-border/50 gap-2">
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                <FileSelectorDropdown
+                  files={documents
+                    .filter((d) => d.status === "complete" && d.whisperHash)
+                    .map((d) => ({
+                      id: d.whisperHash!,
+                      name: d.fileName || d.name,
+                    }))}
+                  selectedId={whisperHash || ""}
+                  onSelect={(hash) => {
+                    // Find document by hash
+                    const doc = documents.find((d) => d.whisperHash === hash);
+                    if (doc) {
+                      setActiveDocument(doc.id);
+                      setSearchParams(
+                        { whisper_hash: hash, fileName: doc.fileName || doc.name },
+                        { replace: true }
+                      );
+                    }
+                  }}
+                  onRemove={(hash) => {
+                    // Find document by hash and remove it
+                    const doc = documents.find((d) => d.whisperHash === hash);
+                    if (doc) {
+                      removeDocument(doc.id);
+                      // If this was the active document, the context will auto-select another
+                      // If no documents left, the sync effect will redirect to upload
+                    }
+                  }}
+                />
+                <Button
+                  onClick={() => {
+                    clearDocuments();
+                    navigate("/upload");
+                  }}
+                  variant="ghost"
+                  size="sm"
+                  className="gap-2 text-muted-foreground hover:text-destructive shrink-0"
+                  title="Clear all files and reset session"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  <span className="hidden sm:inline">Reset Session</span>
+                </Button>
+              </div>
               <Button
                 onClick={handleStructureDocument}
                 disabled={structureLoading || !resultText}
                 variant="outline"
                 size="sm"
-                className="gap-2"
+                className="gap-2 shrink-0"
               >
                 {structureLoading ? (
                   <>
