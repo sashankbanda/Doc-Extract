@@ -98,28 +98,34 @@ function isNumericValue(value: any): boolean {
 }
 
 const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({ data, sourceRefs, onHighlight }) => {
-  const summary = data?.summary || {};
+  const reportInfo = data?.report_info || {};
   const claims: any[] = Array.isArray(data?.claims) ? data.claims : [];
+  const policyPeriods: any[] = Array.isArray(data?.policy_period_summary?.periods) 
+    ? data.policy_period_summary.periods 
+    : [];
 
-  // Get all keys from summary, filtering out null/undefined values
-  const summaryKeys = Object.keys(summary).filter((key) => {
-    const value = summary[key];
+  // Get all keys from report_info, filtering out null/undefined values
+  const reportInfoKeys = Object.keys(reportInfo).filter((key) => {
+    const value = reportInfo[key];
     return value !== null && value !== undefined && value !== "";
   });
 
   // Get column keys from the first claim object (if claims exist)
   const claimColumns: string[] = claims.length > 0 ? Object.keys(claims[0]) : [];
 
+  // Get column keys from the first policy period object (if periods exist)
+  const periodColumns: string[] = policyPeriods.length > 0 ? Object.keys(policyPeriods[0]) : [];
+
   return (
     <div className="space-y-6">
-      {/* Summary Section - Dynamic */}
-      {summaryKeys.length > 0 && (
+      {/* Report Info Section - Top Card */}
+      {reportInfoKeys.length > 0 && (
         <div className={sectionCard}>
-          <h3 className="text-sm font-semibold mb-3">Summary</h3>
+          <h3 className="text-sm font-semibold mb-3">Report Info</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-            {summaryKeys.map((key) => {
-              const value = summary[key];
-              const path = `summary.${key}`;
+            {reportInfoKeys.map((key) => {
+              const value = reportInfo[key];
+              const path = `report_info.${key}`;
               return (
                 <div key={key} className="flex flex-col">
                   <span className="text-muted-foreground">{formatKey(key)}</span>
@@ -133,7 +139,7 @@ const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({ data, sourc
         </div>
       )}
 
-      {/* Claims Section - Dynamic */}
+      {/* Claims Section - Middle Section */}
       {claims.length > 0 && (
         <div className={sectionCard}>
           <div className="flex items-center justify-between mb-3">
@@ -187,8 +193,61 @@ const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({ data, sourc
         </div>
       )}
 
+      {/* Policy Period History Section - Bottom Section */}
+      {policyPeriods.length > 0 && (
+        <div className={sectionCard}>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold">Policy Period History</h3>
+            <span className="text-xs text-muted-foreground">{policyPeriods.length} {policyPeriods.length === 1 ? "period" : "periods"}</span>
+          </div>
+          <div className="overflow-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="bg-muted/50 text-xs text-muted-foreground">
+                  {periodColumns.map((colKey) => (
+                    <th
+                      key={colKey}
+                      className={cn(
+                        "text-left px-3 py-2 font-medium",
+                        isNumericValue(policyPeriods[0]?.[colKey]) && "text-right"
+                      )}
+                    >
+                      {formatKey(colKey)}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {policyPeriods.map((period, idx) => (
+                  <tr key={idx} className="border-t border-border/50">
+                    {periodColumns.map((colKey) => {
+                      const value = period[colKey];
+                      const path = `policy_period_summary.periods[${idx}].${colKey}`;
+                      const isNumeric = isNumericValue(value);
+                      return (
+                        <td
+                          key={colKey}
+                          className={cn(
+                            "px-3 py-2",
+                            isNumeric && "text-right"
+                          )}
+                        >
+                          <HighlightValue path={path} sourceRefs={sourceRefs} onHighlight={onHighlight}>
+                            {formatValue(value)}
+                          </HighlightValue>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* Empty State */}
-      {summaryKeys.length === 0 && claims.length === 0 && (
+      {reportInfoKeys.length === 0 && claims.length === 0 && policyPeriods.length === 0 && (
         <div className={sectionCard}>
           <p className="text-sm text-muted-foreground text-center py-4">
             No structured data found.
