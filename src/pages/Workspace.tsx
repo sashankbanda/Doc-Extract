@@ -14,6 +14,7 @@ import { BoundingBox, LayoutText, ExtractedTable, ExtractedField } from "@/types
 import { apiRetrieve, apiHighlight, API_BASE, structureDocument, StructuredDataResponse } from "@/lib/api";
 import DocumentViewer, { guessFileType } from "@/components/DocumentViewer";
 import StructuredDataViewer from "@/components/StructuredDataViewer";
+import { useDocumentContext } from "@/context/DocumentContext";
 
 type TabType = "text" | "tables" | "fields";
 
@@ -24,10 +25,31 @@ const tabs: { id: TabType; label: string; icon: typeof FileText }[] = [
 ];
 
 export default function Workspace() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  const whisperHash = searchParams.get("whisper_hash");
-  const fileName = searchParams.get("fileName") || "document";
+  const { documents, activeDocumentId, setActiveDocument, dataCache, cacheData } = useDocumentContext();
+  
+  // Get whisper_hash from URL
+  const urlHash = searchParams.get("whisper_hash");
+  
+  // Find active document by hash or by activeDocumentId
+  const activeDocument = useMemo(() => {
+    if (urlHash) {
+      // First try to find by whisperHash
+      const docByHash = documents.find((d) => d.whisperHash === urlHash);
+      if (docByHash) return docByHash;
+    }
+    if (activeDocumentId) {
+      // Then try to find by activeDocumentId
+      const docById = documents.find((d) => d.id === activeDocumentId);
+      if (docById) return docById;
+    }
+    // Fallback: get first complete document
+    return documents.find((d) => d.status === "complete" && d.whisperHash) || null;
+  }, [documents, urlHash, activeDocumentId]);
+
+  const whisperHash = activeDocument?.whisperHash || urlHash;
+  const fileName = activeDocument?.fileName || activeDocument?.name || searchParams.get("fileName") || "document";
 
   const [resultText, setResultText] = useState<string>("");
   const [lineMetadata, setLineMetadata] = useState<any[]>([]);
@@ -54,22 +76,75 @@ export default function Workspace() {
     });
   }, []);
 
-  // Log only once on mount
-  useEffect(() => {
-    console.log("[Workspace] Page loaded with whisper_hash:", whisperHash);
-    console.log("[Workspace] All search params:", Object.fromEntries(searchParams.entries()));
-  }, [whisperHash, searchParams]);
-
-  // Fetch data on mount
+  // Synchronization Logic: URL <-> Context
   useEffect(() => {
     if (!whisperHash) {
-      console.warn("[Workspace] No whisper_hash in URL, redirecting to upload");
+      // No hash in URL or context - redirect to upload
+      if (documents.length === 0) {
+        console.warn("[Workspace] No documents found, redirecting to upload");
+        navigate("/upload");
+        return;
+      }
+      // If we have documents but no hash, use the first complete one
+      const firstComplete = documents.find((d) => d.status === "complete" && d.whisperHash);
+      if (firstComplete && firstComplete.whisperHash) {
+        setActiveDocument(firstComplete.id);
+        setSearchParams(
+          { whisper_hash: firstComplete.whisperHash, fileName: firstComplete.fileName || firstComplete.name },
+          { replace: true }
+        );
+        return;
+      }
       navigate("/upload");
+      return;
+    }
+
+    // If URL has hash but activeDocumentId doesn't match, find and set active document
+    if (urlHash && activeDocument && activeDocument.id !== activeDocumentId) {
+      console.log("[Workspace] Syncing context with URL hash:", urlHash);
+      setActiveDocument(activeDocument.id);
+    }
+
+    // If URL has no hash but activeDocumentId is set, update URL
+    if (!urlHash && activeDocument && activeDocument.whisperHash) {
+      console.log("[Workspace] Syncing URL with active document:", activeDocument.whisperHash);
+      setSearchParams(
+        { whisper_hash: activeDocument.whisperHash, fileName: activeDocument.fileName || activeDocument.name },
+        { replace: true }
+      );
+    }
+  }, [urlHash, activeDocument, activeDocumentId, setActiveDocument, setSearchParams, navigate, documents]);
+
+  // Read-Through Cache Pattern: Fetch data with caching
+  useEffect(() => {
+    if (!whisperHash) {
+      setLoading(false);
+      setStructuredData(null);
       return;
     }
 
     const fetchData = async () => {
       console.log("[Workspace] Fetching data for whisperHash:", whisperHash);
+      
+      // Check cache first
+      const cachedData = dataCache[whisperHash];
+      if (cachedData && cachedData.result_text !== undefined) {
+        console.log("[Workspace] Cache hit for whisperHash:", whisperHash);
+        setResultText(cachedData.result_text || "");
+        setLineMetadata(cachedData.line_metadata || []);
+        
+        // Also load cached structured data if available
+        if (cachedData.structured) {
+          console.log("[Workspace] Loading cached structured data");
+          setStructuredData(cachedData.structured);
+        }
+        
+        setLoading(false);
+        return;
+      }
+
+      // Cache miss - fetch from API
+      console.log("[Workspace] Cache miss, fetching from API for whisperHash:", whisperHash);
       setLoading(true);
       try {
         const data = await apiRetrieve(whisperHash);
@@ -77,6 +152,14 @@ export default function Workspace() {
           resultTextLength: data.result_text?.length,
           lineMetadataLength: data.line_metadata?.length
         });
+        
+        // Save to cache (preserve structured data if it exists)
+        cacheData(whisperHash, {
+          ...cachedData, // Preserve any existing cached data (like structured)
+          result_text: data.result_text || "",
+          line_metadata: data.line_metadata || [],
+        });
+        
         setResultText(data.result_text || "");
         setLineMetadata(data.line_metadata || []);
       } catch (err: any) {
@@ -88,7 +171,7 @@ export default function Workspace() {
     };
 
     fetchData();
-  }, [whisperHash, navigate]);
+  }, [whisperHash, dataCache, cacheData]);
 
   // Convert result_text to LayoutText[] format - preserve visual structure
   const layoutTextItems: LayoutText[] = useMemo(() => {
@@ -247,14 +330,29 @@ export default function Workspace() {
   // Collect all highlights
   const allHighlights = hoveredBoundingBox ? [hoveredBoundingBox] : [];
 
-  // Handle structure document
+  // Handle structure document with caching
   const handleStructureDocument = useCallback(async () => {
     if (!whisperHash) return;
     
+    // Check cache first
+    const cachedData = dataCache[whisperHash];
+    if (cachedData && cachedData.structured) {
+      console.log("[Workspace] Using cached structured data for whisperHash:", whisperHash);
+      setStructuredData(cachedData.structured);
+      return;
+    }
+
     setStructureLoading(true);
     setStructureError(null);
     try {
       const data = await structureDocument(whisperHash);
+      
+      // Save to cache (merge with existing cached data)
+      cacheData(whisperHash, {
+        ...cachedData,
+        structured: data,
+      });
+      
       setStructuredData(data);
     } catch (err: any) {
       console.error("[Workspace] Structure error:", err);
@@ -262,7 +360,7 @@ export default function Workspace() {
     } finally {
       setStructureLoading(false);
     }
-  }, [whisperHash]);
+  }, [whisperHash, dataCache, cacheData]);
 
   // Mock data for tables and fields (can be enhanced later)
   const mockTables: ExtractedTable[] = [];
@@ -466,9 +564,24 @@ export default function Workspace() {
             {/* Header with file selector */}
             <div className="flex items-center justify-between p-4 border-b border-border/50">
               <FileSelectorDropdown
-                files={[{ id: whisperHash, name: fileName }]}
-                selectedId={whisperHash}
-                onSelect={() => {}}
+                files={documents
+                  .filter((d) => d.status === "complete" && d.whisperHash)
+                  .map((d) => ({
+                    id: d.whisperHash!,
+                    name: d.fileName || d.name,
+                  }))}
+                selectedId={whisperHash || ""}
+                onSelect={(hash) => {
+                  // Find document by hash
+                  const doc = documents.find((d) => d.whisperHash === hash);
+                  if (doc) {
+                    setActiveDocument(doc.id);
+                    setSearchParams(
+                      { whisper_hash: hash, fileName: doc.fileName || doc.name },
+                      { replace: true }
+                    );
+                  }
+                }}
               />
               <Button
                 onClick={handleStructureDocument}
