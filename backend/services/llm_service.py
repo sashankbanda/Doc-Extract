@@ -162,7 +162,7 @@ class LLMService:
                 self._assign_coord(highlight, path, coord)
         return highlight
 
-    def _assign_coord(self, highlight: Dict[str, Any], path: str, coord: List[Any]) -> None:
+    def _assign_coord(self, highlight: Dict[str, Any], path: str, coord_data: Dict[str, Any]) -> None:
         parts = path.replace("]", "").split(".")
         current = highlight
         for part in parts[:-1]:
@@ -180,14 +180,14 @@ class LLMService:
             leaf_dict = current.setdefault(base, {})
             index_key = index if index else "0"
             coords_list = leaf_dict.setdefault(index_key, [])
-            coords_list.append(coord)
+            coords_list.append(coord_data)
         else:
             coords_list = current.setdefault(leaf, [])
-            coords_list.append(coord)
+            coords_list.append(coord_data)
 
     def _line_ref_to_coord(
         self, ref: Any, line_metadata: Union[List[LineMeta], Dict[str, LineMeta]]
-    ) -> Optional[List[Any]]:
+    ) -> Optional[Dict[str, Any]]:
         line_index = self._normalize_ref(ref)
         if line_index is None:
             return None
@@ -196,15 +196,43 @@ class LLMService:
         if meta is None:
             return None
 
-        return self._meta_to_coord(meta)
+        # Extract page from metadata
+        page = None
+        if isinstance(meta, dict):
+            page = meta.get("page") or meta.get("p")
+        elif isinstance(meta, (list, tuple)) and len(meta) > 0:
+            page = meta[0]  # First element is typically page
+        
+        # Get coordinates [x, y, width, height]
+        coords = self._meta_to_coord(meta)
+        if coords is None:
+            return None
+        
+        # Return object with both coordinates and page
+        return {
+            "coords": coords,  # [x, y, width, height]
+            "page": page if page is not None else 0  # Default to 0 if page not found
+        }
 
     def _normalize_ref(self, ref: Any) -> Optional[int]:
         if isinstance(ref, int):
             return ref
         if isinstance(ref, str):
             cleaned = ref.strip()
+            # Support decimal numbers
             if cleaned.isdigit():
                 return int(cleaned)
+            # Support hexadecimal references (e.g., "0x11", "1A", "2C")
+            if cleaned.startswith("0x") or cleaned.startswith("0X"):
+                try:
+                    return int(cleaned, 16)
+                except ValueError:
+                    return None
+            # Support hex without prefix (e.g., "1A", "2C")
+            try:
+                return int(cleaned, 16)
+            except ValueError:
+                pass
         return None
 
     def _get_line_meta(
@@ -235,25 +263,54 @@ class LLMService:
 
     def _meta_to_coord(self, meta: LineMeta) -> Optional[List[Any]]:
         """
-        Normalize different metadata shapes to [page, x, y, width, height].
+        Normalize different metadata shapes to [x, y, width, height] (4 values, NO page field).
+        Returns None if coordinates cannot be determined.
         """
         if isinstance(meta, dict):
-            page = meta.get("page") or meta.get("p") or 0
-            x = meta.get("x") or meta.get("left") or 0
-            y = meta.get("y") or meta.get("top") or 0
-            width = meta.get("width") or meta.get("w") or meta.get("right") or 1
-            height = meta.get("height") or meta.get("h") or meta.get("bottom") or 1
-            return [page, x, y, width, height]
+            x = meta.get("x") or meta.get("left")
+            y = meta.get("y") or meta.get("top")
+            width = meta.get("width") or meta.get("w") or meta.get("right")
+            height = meta.get("height") or meta.get("h") or meta.get("bottom")
+            
+            # Return None if any required coordinate is missing or invalid
+            if x is None or y is None or width is None or height is None:
+                return None
+            if not isinstance(x, (int, float)) or not isinstance(y, (int, float)):
+                return None
+            if not isinstance(width, (int, float)) or not isinstance(height, (int, float)):
+                return None
+            if width <= 0 or height <= 0:
+                return None
+                
+            return [x, y, width, height]
 
         if isinstance(meta, (list, tuple)):
             if len(meta) >= 5:
-                page, x, y, width, height = meta[:5]
-                return [page, x, y, width, height]
+                # Format: [page, x, y, width, height] - extract coordinates only
+                _, x, y, width, height = meta[:5]
+                if x is None or y is None or width is None or height is None:
+                    return None
+                if not isinstance(x, (int, float)) or not isinstance(y, (int, float)):
+                    return None
+                if not isinstance(width, (int, float)) or not isinstance(height, (int, float)):
+                    return None
+                if width <= 0 or height <= 0:
+                    return None
+                return [x, y, width, height]
             if len(meta) >= 4:
                 # Format seen in highlight endpoint: [page, base_y, height, page_height]
-                page, base_y, height_val, _page_height = meta[:4]
-                top_y = (base_y - height_val) if height_val is not None else base_y
-                return [page, 0, max(0, top_y), 1, height_val or 0]
+                # Convert to [x, y, width, height] where x=0 (full-width line), y=top_y, width=page_height (proxy), height=height_val
+                _, base_y, height_val, page_height = meta[:4]
+                if base_y is None or height_val is None or page_height is None:
+                    return None
+                if not isinstance(base_y, (int, float)) or not isinstance(height_val, (int, float)) or not isinstance(page_height, (int, float)):
+                    return None
+                if height_val <= 0 or page_height <= 0:
+                    return None
+                top_y = max(0, base_y - height_val)
+                # For full-width lines, use page_height as a reasonable width estimate
+                # This is a common pattern where lines span the full page width
+                return [0, top_y, page_height, height_val]
 
         return None
 

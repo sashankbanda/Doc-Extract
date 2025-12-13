@@ -15,10 +15,53 @@ const cellHighlight =
 
 function getRefs(sourceRefs: Record<string, number[]>, path: string): number[] | undefined {
   if (!sourceRefs) return undefined;
-  // Try exact path, and with/without leading "data."
-  if (sourceRefs[path]) return sourceRefs[path];
-  if (!path.startsWith("data.") && sourceRefs[`data.${path}`]) return sourceRefs[`data.${path}`];
-  if (path.startsWith("data.") && sourceRefs[path.slice(5)]) return sourceRefs[path.slice(5)];
+  
+  // Try multiple path variations to match different formats
+  const variations: string[] = [
+    path, // Exact match: "claims[0].claimNumber"
+  ];
+  
+  // Add with/without "data." prefix
+  if (path.startsWith("data.")) {
+    variations.push(path.slice(5)); // Remove "data." prefix
+  } else {
+    variations.push(`data.${path}`); // Add "data." prefix
+  }
+  
+  // Handle array notation variations: claims[0].claimNumber vs claims.0.claimNumber
+  // Convert [0] to .0
+  const dotNotation = path.replace(/\[(\d+)\]/g, ".$1");
+  variations.push(dotNotation);
+  if (!dotNotation.startsWith("data.")) {
+    variations.push(`data.${dotNotation}`);
+  }
+  
+  // Convert .0 back to [0] (for paths that might already be in dot notation)
+  const bracketNotation = path.replace(/\.(\d+)\./g, "[$1].").replace(/\.(\d+)$/, "[$1]");
+  if (bracketNotation !== path) {
+    variations.push(bracketNotation);
+    if (!bracketNotation.startsWith("data.")) {
+      variations.push(`data.${bracketNotation}`);
+    }
+  }
+  
+  // Remove duplicates
+  const uniqueVariations = [...new Set(variations)];
+  
+  // Try each variation
+  for (const variation of uniqueVariations) {
+    if (sourceRefs[variation]) {
+      console.log(`[StructuredDataViewer] Found sourceRefs for path "${path}" using variation "${variation}"`);
+      return sourceRefs[variation];
+    }
+  }
+  
+  // Debug: log available keys to help troubleshoot (only for first few misses to avoid spam)
+  if (Object.keys(sourceRefs).length > 0) {
+    const sampleKeys = Object.keys(sourceRefs).slice(0, 5);
+    console.debug(`[StructuredDataViewer] No match for path "${path}". Sample available keys:`, sampleKeys);
+  }
+  
   return undefined;
 }
 
@@ -33,13 +76,19 @@ function HighlightValue({
   sourceRefs: Record<string, number[]> | undefined;
   onHighlight: HighlightHandler;
 }) {
+  // Get line IDs from sourceRefs
   const lineIds = sourceRefs ? getRefs(sourceRefs, path) : undefined;
   const clickable = lineIds && lineIds.length > 0;
 
   const handleClick = () => {
-    if (clickable) {
-      onHighlight(lineIds!);
+    if (!clickable || !lineIds) {
+      console.warn(`[StructuredDataViewer] Cannot highlight path "${path}" - no line IDs found`);
+      return;
     }
+    
+    // Pass line IDs to onHighlight - this will highlight the entire lines
+    console.log(`[StructuredDataViewer] Highlighting path "${path}" with line IDs:`, lineIds);
+    onHighlight(lineIds);
   };
 
   return (

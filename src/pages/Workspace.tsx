@@ -58,6 +58,7 @@ export default function Workspace() {
   const [activeTab, setActiveTab] = useState<TabType>("text");
   const [hoveredBoundingBox, setHoveredBoundingBox] = useState<BoundingBox | null>(null);
   const [activeBoundingBox, setActiveBoundingBox] = useState<BoundingBox | null>(null);
+  const [secondaryHighlights, setSecondaryHighlights] = useState<BoundingBox[]>([]);
   const [pageDimensions, setPageDimensions] = useState<Record<number, { width: number, height: number }>>({});
   const [structuredData, setStructuredData] = useState<StructuredDataResponse | null>(null);
   const [structureLoading, setStructureLoading] = useState<boolean>(false);
@@ -335,8 +336,11 @@ export default function Workspace() {
     }
   }, [whisperHash, pageDimensions]);
 
-  // Collect all highlights
-  const allHighlights = hoveredBoundingBox ? [hoveredBoundingBox] : [];
+  // Collect all highlights: hovered + secondary highlights (reduced intensity)
+  const allHighlights = [
+    ...(hoveredBoundingBox ? [hoveredBoundingBox] : []),
+    ...secondaryHighlights
+  ];
 
   // Handle structure document with caching
   const handleStructureDocument = useCallback(async () => {
@@ -375,8 +379,9 @@ export default function Workspace() {
   const mockFields: ExtractedField[] = [];
 
   // Highlight a specific line id (0-based) using existing highlight API
+  // Returns the bounding box if successful, throws error if failed
   const highlightLineById = useCallback(
-    async (lineIndex: number) => {
+    async (lineIndex: number): Promise<BoundingBox> => {
       if (lineIndex == null || lineIndex < 0) {
         throw new Error(`Invalid line index: ${lineIndex}`);
       }
@@ -390,27 +395,21 @@ export default function Workspace() {
       if (!dims) {
         throw new Error(`Missing page dimensions for page ${displayPage}`);
       }
-      try {
-        const rect = await apiHighlight(
-          whisperHash!,
-          lineIndex,
-          Math.round(dims.width),
-          Math.round(dims.height)
-        );
-        const pdfPage = rect.page + 1;
-        setActiveBoundingBox({
-          x: rect.x1,
-          y: rect.y1,
-          width: rect.x2 - rect.x1,
-          height: rect.y2 - rect.y1,
-          page: pdfPage
-        });
-        setTimeout(() => setActiveBoundingBox(null), 3000);
-      } catch (err: any) {
-        // Re-throw with more context so Promise.allSettled can catch it
-        const errorMessage = err?.message || String(err) || "Unknown error";
-        throw new Error(`Failed to highlight line ${lineIndex}: ${errorMessage}`);
-      }
+      const rect = await apiHighlight(
+        whisperHash!,
+        lineIndex,
+        Math.round(dims.width),
+        Math.round(dims.height)
+      );
+      const pdfPage = rect.page + 1;
+      const boundingBox: BoundingBox = {
+        x: rect.x1,
+        y: rect.y1,
+        width: rect.x2 - rect.x1,
+        height: rect.y2 - rect.y1,
+        page: pdfPage
+      };
+      return boundingBox;
     },
     [lineMetadata, pageDimensions, whisperHash]
   );
@@ -426,19 +425,25 @@ export default function Workspace() {
         return;
       }
 
+      console.log(`[Workspace] Highlighting ${validIds.length} line(s):`, validIds);
+
+      // Clear previous highlights
+      setActiveBoundingBox(null);
+      setSecondaryHighlights([]);
+
       // Process all line IDs with Promise.allSettled to handle errors gracefully
       const results = await Promise.allSettled(
         validIds.map(id => highlightLineById(id))
       );
 
-      // Collect successful results and log failures
-      const successful: number[] = [];
+      // Collect successful bounding boxes
+      const boundingBoxes: BoundingBox[] = [];
       const failed: Array<{ id: number; reason: string }> = [];
 
       results.forEach((result, index) => {
         const lineId = validIds[index];
         if (result.status === "fulfilled") {
-          successful.push(lineId);
+          boundingBoxes.push(result.value);
         } else {
           const reason = result.reason?.message || String(result.reason) || "Unknown error";
           failed.push({ id: lineId, reason });
@@ -446,16 +451,53 @@ export default function Workspace() {
         }
       });
 
-      // Log summary
-      if (successful.length > 0) {
-        console.log(`[Workspace] Successfully highlighted ${successful.length} line(s):`, successful);
-      }
-      if (failed.length > 0) {
-        console.warn(`[Workspace] Failed to highlight ${failed.length} line(s):`, failed);
+      if (boundingBoxes.length === 0) {
+        console.warn("[Workspace] No lines could be highlighted");
+        return;
       }
 
-      // If no lines succeeded, we've already logged warnings above
-      // The first successful highlight will be shown (handled by highlightLineById)
+      // First line: full intensity (active highlight with glow)
+      const firstBoundingBox = boundingBoxes[0];
+      setActiveBoundingBox(firstBoundingBox);
+
+      // Remaining lines: reduced intensity (secondary highlights)
+      if (boundingBoxes.length > 1) {
+        setSecondaryHighlights(boundingBoxes.slice(1));
+        console.log(`[Workspace] Highlighted ${boundingBoxes.length} line(s): first line (full intensity), ${boundingBoxes.length - 1} additional line(s) (reduced intensity)`);
+      } else {
+        console.log(`[Workspace] Highlighted 1 line (full intensity)`);
+      }
+
+      // Auto-clear highlights after 5 seconds
+      setTimeout(() => {
+        setActiveBoundingBox(null);
+        setSecondaryHighlights([]);
+      }, 5000);
+
+      // Scroll to first highlight
+      setTimeout(() => {
+        const pageElement = document.getElementById(`page_${firstBoundingBox.page}`);
+        if (pageElement) {
+          const scrollContainer = pageElement.closest('.overflow-auto');
+          if (scrollContainer) {
+            const canvas = pageElement.querySelector('canvas') as HTMLCanvasElement;
+            const pageRect = pageElement.getBoundingClientRect();
+            const containerRect = scrollContainer.getBoundingClientRect();
+            const canvasRect = canvas?.getBoundingClientRect();
+            const canvasOffsetY = canvasRect ? canvasRect.top - pageRect.top : 0;
+            const pageTop = pageRect.top - containerRect.top + scrollContainer.scrollTop;
+            const targetScrollTop = pageTop + canvasOffsetY + firstBoundingBox.y - (containerRect.height / 2);
+            
+            scrollContainer.scrollTo({
+              top: Math.max(0, targetScrollTop),
+              left: scrollContainer.scrollLeft,
+              behavior: 'smooth'
+            });
+          } else {
+            pageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }
+      }, 150);
     },
     [highlightLineById]
   );
