@@ -109,6 +109,29 @@ export default function Workspace() {
       return;
     }
 
+    // If URL has a hash but it's not in the document context, it might be invalid/expired
+    if (urlHash && !activeDocument) {
+      if (documents.length === 0) {
+        // No documents available - clear URL and redirect to upload
+        console.warn("[Workspace] URL hash not found in context and no documents available, clearing URL and redirecting");
+        setSearchParams({}, { replace: true });
+        navigate("/upload");
+        return;
+      } else {
+        // We have documents but URL hash doesn't match - use first available document
+        const firstComplete = documents.find((d) => d.status === "complete" && d.whisperHash);
+        if (firstComplete && firstComplete.whisperHash) {
+          console.warn("[Workspace] URL hash not found in context, using first available document");
+          setActiveDocument(firstComplete.id);
+          setSearchParams(
+            { whisper_hash: firstComplete.whisperHash, fileName: firstComplete.fileName || firstComplete.name },
+            { replace: true }
+          );
+          return;
+        }
+      }
+    }
+
     // If URL has hash but activeDocumentId doesn't match, find and set active document
     if (urlHash && activeDocument && activeDocument.id !== activeDocumentId) {
       console.log("[Workspace] Syncing context with URL hash:", urlHash);
@@ -220,6 +243,27 @@ export default function Workspace() {
         }
       } catch (err: any) {
         console.error("[Workspace] Error fetching data:", err);
+        
+        // Check if this is a 400 Bad Request error (invalid/expired hash)
+        const is400Error = err.message && (
+          err.message.includes("400") || 
+          err.message.includes("Bad Request") ||
+          err.message.includes("Result not found") ||
+          err.message.includes("API error") ||
+          err.message.includes("Client error")
+        );
+        
+        // If hash is not in document context and we get a 400 error, the hash is invalid/expired
+        const hashNotInContext = !activeDocument || activeDocument.whisperHash !== whisperHash;
+        
+        if (is400Error && hashNotInContext) {
+          console.warn("[Workspace] Invalid/expired whisper_hash detected, clearing URL and redirecting to upload");
+          // Clear the invalid hash from URL and redirect to upload
+          setSearchParams({}, { replace: true });
+          navigate("/upload");
+          return;
+        }
+        
         setError(err.message);
       } finally {
         setLoading(false);
