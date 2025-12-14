@@ -443,7 +443,7 @@ export default function Workspace() {
   );
 
   const handleStructuredHighlight = useCallback(
-    async (lineIds: number[]) => {
+    async (lineIds: number[], isFirstLine: boolean = true) => {
       if (!lineIds || lineIds.length === 0) return;
       
       // Filter valid line IDs
@@ -567,10 +567,9 @@ export default function Workspace() {
                 </Button>
               </div>
             )}
-            {structuredData && (
+            {structuredData && structuredData.items && (
               <StructuredDataViewer
-                data={structuredData.data}
-                sourceRefs={structuredData._source_refs}
+                items={structuredData.items}
                 onHighlight={handleStructuredHighlight}
               />
             )}

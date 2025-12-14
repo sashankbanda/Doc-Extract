@@ -26,16 +26,11 @@ async def structure_document(whisper_hash: str):
             status_code=500, detail=f"Failed to structure document: {exc}"
         ) from exc
 
-    # New structure with groups, field_refs, and diagnostics
+    # Flat structure: items[] array with key, value, line_numbers
     output_payload = {
         "whisper_hash": whisper_hash,
-        "data": structured.get("data", {}),  # Contains "groups", "report_info", "claims", etc.
-        "field_refs": structured.get("field_refs", {}),  # Stable field IDs (new format)
-        "highlight_data": structured.get("highlight_data", {}),  # Flat structure
-        "diagnostics": structured.get("diagnostics", {}),
+        "items": structured.get("items", []),  # Flat array of extracted items
         "metadata": stored.get("metadata"),
-        # Backward compatibility: include _source_refs for frontend
-        "_source_refs": structured.get("_source_refs", {}),  # Backward-compatible format
     }
 
     file_store.save_json_output(whisper_hash, output_payload, suffix="_structured")

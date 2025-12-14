@@ -32,49 +32,50 @@ class LLMService:
 
     def _build_system_prompt(self) -> str:
         """
-        Build system prompt that instructs LLM to only extract raw fields with line numbers.
-        No normalization, grouping, or canonical keys - just raw extraction.
+        Build system prompt that instructs LLM to extract a flat array of items with line numbers.
+        No normalization, grouping, structure inference, or coordinate math - just raw extraction.
         """
         return (
-            "You are an expert insurance document extraction AI. Your goal is to extract **ALL** data from the Loss Run Report.\n\n"
+            "You are an expert insurance document extraction AI. Your goal is to extract **ALL** visible data from the Loss Run Report.\n\n"
             "**CRITICAL: Your role is ONLY to extract raw fields exactly as seen in the document.**\n\n"
-            "**1. Extraction Rules:**\n\n"
-            "- Extract every visible field/column from the document\n"
-            "- Use the EXACT label as it appears in the document (e.g., \"Claimant Name\", \"Notification Date\")\n"
-            "- Extract the EXACT value as it appears (do not normalize or transform)\n"
-            "- For multiline values, indicate which lines belong together by listing all line numbers\n"
-            "- Do NOT guess missing data\n"
-            "- Do NOT normalize field names to canonical keys\n"
-            "- Do NOT group fields\n"
-            "- Do NOT use array indices in your output\n\n"
-            "**2. Line Number References:**\n\n"
-            "- The raw text contains line numbers in square brackets (e.g., [15])\n"
+            "**STRICT RULES - YOU MUST FOLLOW THESE:**\n\n"
+            "1. Extract EVERY visible field/value from the document\n"
+            "2. Do NOT normalize keys (use exact labels as they appear)\n"
+            "3. Do NOT group claims or create nested structure\n"
+            "4. Do NOT invent structure or infer relationships\n"
+            "5. Do NOT skip columns or summarize data\n"
+            "6. Do NOT infer missing values\n"
+            "7. Do NOT guess line numbers - if unclear, skip the item\n\n"
+            "**Line Number References:**\n\n"
+            "- The raw text contains line numbers in square brackets (e.g., [15], [0x11])\n"
             "- For each field, list ALL line numbers where that field's value appears\n"
             "- Line numbers must match the [NN] markers in the text EXACTLY\n"
-            "- If a field spans multiple lines, include all line numbers (e.g., [15, 16, 17])\n\n"
-            "**3. Output JSON Structure:**\n\n"
-            "Return valid JSON with this exact structure:\n"
+            "- Multi-line values → include all line numbers (e.g., [15, 16, 17])\n"
+            "- If line numbers are unclear or missing → skip the item (do NOT guess)\n\n"
+            "**Output JSON Structure (MANDATORY):**\n\n"
+            "Return valid JSON with this EXACT structure:\n"
             "{\n"
-            '  "raw_fields": [\n'
+            '  "items": [\n'
             "    {\n"
-            '      "label": "Claimant Name",\n'
+            '      "key": "Claimant Name",\n'
             '      "value": "SYDIA",\n'
-            '      "lines": [15, 16, 17]\n'
+            '      "line_numbers": [15, 16, 17]\n'
             "    },\n"
             "    {\n"
-            '      "label": "Claim Number",\n'
+            '      "key": "Claim Number",\n'
             '      "value": "12345",\n'
-            '      "lines": [12]\n'
+            '      "line_numbers": [12]\n'
             "    }\n"
-            "    // ... more fields\n"
             "  ]\n"
             "}\n\n"
-            "**Important:**\n\n"
-            "- Extract ALL visible fields from the document\n"
-            "- Use exact labels as they appear (e.g., \"Notification Date\", not \"reportedDate\")\n"
-            "- Use exact values as they appear (no normalization)\n"
-            "- List ALL line numbers where each field appears\n"
-            "- Line numbers must match [NN] markers exactly\n"
+            "**Requirements:**\n\n"
+            "- `items` is an array\n"
+            "- One object per extracted value\n"
+            "- `key` = exact label as it appears in document\n"
+            "- `value` = exact value as it appears (no transformation)\n"
+            "- `line_numbers` = array of integers matching [NN] markers exactly\n"
+            "- If a value exists, it MUST have line_numbers\n"
+            "- If line_numbers are unclear → skip the item (do NOT guess)\n"
             "- Keep strictly to JSON. Do not add comments or extra keys.\n"
             "- If a field is not present, omit it (do not include null values)."
         )
@@ -83,27 +84,27 @@ class LLMService:
         self, raw_text: str, line_metadata: Union[List[LineMeta], Dict[str, LineMeta]]
     ) -> Dict[str, Any]:
         """
-        Run the LLM to extract raw fields, then normalize, group, and build highlights.
+        Extract flat items array from document using LLM.
         
-        Pipeline:
-        1. LLM extracts raw fields with line numbers
-        2. Normalize raw labels to canonical keys
-        3. Group normalized fields into semantic sections
-        4. Build flat highlight data with stable field IDs
-        5. Return structured data with diagnostics
+        Returns simple structure:
+        {
+            "items": [
+                {"key": "Claimant Name", "value": "SYDIA", "line_numbers": [15, 16, 17]},
+                ...
+            ]
+        }
+        
+        No normalization, grouping, or complex logic - just raw extraction with line numbers.
         """
-        # Step 1: Standardize line metadata at ingestion
-        standardized_metadata = metadata_service.standardize_metadata(line_metadata)
-        
-        # Step 2: Call LLM to extract raw fields
+        # Call LLM to extract items
         messages = [
             {"role": "system", "content": self.system_prompt},
             {
                 "role": "user",
                 "content": (
                     "Extract data from the following document text. "
-                    "Text includes line numbers in square brackets like [12]. "
-                    "List the line numbers for each field in the 'lines' array.\n\n"
+                    "Text includes line numbers in square brackets like [12] or [0x11]. "
+                    "List the line numbers for each field in the 'line_numbers' array.\n\n"
                     f"{raw_text}"
                 ),
             },
@@ -127,99 +128,50 @@ class LLMService:
             else:
                 raise
 
-        # Extract raw fields from LLM response
-        raw_fields = parsed.get("raw_fields", [])
-        if not raw_fields:
-            logger.warning("[LLMService] No raw_fields found in LLM response")
-            raw_fields = []
+        # Extract items from LLM response
+        raw_items = parsed.get("items", [])
+        if not raw_items:
+            logger.warning("[LLMService] No items found in LLM response")
+            raw_items = []
 
-        # Step 3: Normalize fields (map raw labels to canonical keys)
-        # Initially normalize without ignored lines (will be updated after noise detection)
-        normalization_result = normalization_service.normalize_fields(raw_fields, ignored_lines=[])
-        normalized_fields = normalization_result["normalized"]
-        unmapped_fields = normalization_result["unmapped_fields"]
-        field_confidence = normalization_result.get("field_confidence", {})
-        label_collisions = normalization_result.get("label_collisions", [])
-
-        # Step 4: Group normalized fields into semantic sections (with page-aware claim windows)
-        grouped_data = grouping_service.group_fields(normalized_fields, standardized_metadata)
+        # Convert and validate items: normalize line_numbers format
+        items = []
+        invalid_items = []
         
-        # Get ignored lines from grouping service (header/footer noise)
-        ignored_lines = grouped_data.get("_ignored_lines", [])
+        for item in raw_items:
+            key = item.get("key", "").strip()
+            value = item.get("value", "").strip()
+            line_numbers_raw = item.get("line_numbers", [])
+            
+            # Skip items with empty key or value
+            if not key or not value:
+                invalid_items.append({"item": item, "reason": "empty key or value"})
+                continue
+            
+            # Convert line numbers to integers (handles hex, strings, etc.)
+            line_numbers = []
+            for line_val in line_numbers_raw:
+                converted = self._convert_line_number(line_val)
+                if converted is not None:
+                    line_numbers.append(converted)
+            
+            # Skip items with no valid line numbers (per requirements: fail silently)
+            if not line_numbers:
+                invalid_items.append({"item": item, "reason": "no valid line_numbers"})
+                continue
+            
+            # Add validated item
+            items.append({
+                "key": key,
+                "value": value,
+                "line_numbers": sorted(list(set(line_numbers)))  # Deduplicate and sort
+            })
         
-        # Re-normalize with ignored lines to filter out noise
-        if ignored_lines:
-            normalization_result = normalization_service.normalize_fields(raw_fields, ignored_lines=ignored_lines)
-            normalized_fields = normalization_result["normalized"]
-            # Update other results but keep original field_confidence and label_collisions
-            unmapped_fields = normalization_result["unmapped_fields"]
-            label_collisions = normalization_result.get("label_collisions", [])
+        if invalid_items:
+            logger.info(f"[LLMService] Skipped {len(invalid_items)} items with invalid line_numbers or empty values")
         
-        # Apply strict mode filtering if enabled
-        if config.STRICT_EXTRACTION:
-            normalized_fields, dropped_fields = self._apply_strict_mode(
-                normalized_fields, field_confidence, label_collisions, grouped_data
-            )
-            # Update diagnostics with dropped fields
-            if dropped_fields:
-                logger.info(f"[LLMService] Strict mode: dropped {len(dropped_fields)} low-confidence/ambiguous fields")
-        else:
-            dropped_fields = []
-        
-        # Step 5: Build flat highlight data with stable field IDs
-        highlight_data, invalid_refs, missing_metadata = self._build_flat_highlights(
-            normalized_fields, standardized_metadata
-        )
-
-        # Step 6: Build stable field ID references (replaces _source_refs)
-        field_refs = self._build_field_refs(normalized_fields)
-
-        # Step 7: Build backward-compatible _source_refs from field_refs and grouped data
-        # (Must happen before removing _line_refs from claims)
-        source_refs = self._build_backward_compatible_source_refs(
-            field_refs, grouped_data, normalized_fields
-        )
-
-        # Step 8: Remove internal tracking fields before returning (frontend doesn't need them)
-        claims = grouped_data.get("claims", [])
-        for claim in claims:
-            if "_line_refs" in claim:
-                del claim["_line_refs"]
-        
-        # Remove internal line refs from report_info
-        report_info = grouped_data.get("report_info", {})
-        keys_to_remove = [k for k in report_info.keys() if k.startswith("_") and k.endswith("_line_refs")]
-        for key in keys_to_remove:
-            del report_info[key]
-
-        # Step 9: Build diagnostics (including all new diagnostic information)
-        claim_warnings = grouped_data.get("_claim_warnings", [])
-        assignment_traces = grouped_data.get("_assignment_traces", [])
-        ignored_lines = grouped_data.get("_ignored_lines", [])
-        
-        diagnostics = {
-            "unmapped_fields": unmapped_fields,
-            "invalid_refs": invalid_refs,
-            "missing_metadata": missing_metadata,
-            "claim_grouping_warnings": claim_warnings,
-            "field_confidence": field_confidence,  # Confidence scores per canonical field
-            "label_collisions": label_collisions,  # Same label, different meaning
-            "claim_assignment_trace": assignment_traces,  # Why fields were assigned to claims
-            "ignored_lines": ignored_lines,  # Header/footer noise lines
-            "dropped_fields": dropped_fields if config.STRICT_EXTRACTION else [],  # Fields dropped in strict mode
-        }
-
         return {
-            "data": {
-                "groups": grouped_data.get("groups", {}),  # New semantic groups
-                "report_info": grouped_data.get("report_info", {}),  # Backward compatibility
-                "claims": grouped_data.get("claims", []),  # Backward compatibility (with _line_refs removed)
-                "policy_period_summary": grouped_data.get("policy_period_summary", {}),  # Backward compatibility
-            },
-            "field_refs": field_refs,  # Stable field IDs, no array indices
-            "_source_refs": source_refs,  # Backward-compatible format for frontend
-            "highlight_data": highlight_data,  # Flat structure
-            "diagnostics": diagnostics,
+            "items": items
         }
 
     def _convert_line_number(self, line_val: Any) -> Optional[int]:
