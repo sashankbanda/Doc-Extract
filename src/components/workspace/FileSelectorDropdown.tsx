@@ -2,6 +2,12 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronDown, FileText, Check, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface FileSelectorDropdownProps {
   files: { id: string; name: string }[];
@@ -29,7 +35,18 @@ export function FileSelectorDropdown({
         )}
       >
         <FileText className="w-4 h-4 text-primary" />
-        <span className="truncate flex-1 text-left">{selectedFile?.name || "Select file"}</span>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="truncate flex-1 text-left">{selectedFile?.name || "Select file"}</span>
+            </TooltipTrigger>
+            {selectedFile && (
+              <TooltipContent>
+                <p className="max-w-xs break-words">{selectedFile.name}</p>
+              </TooltipContent>
+            )}
+          </Tooltip>
+        </TooltipProvider>
         <motion.div
           animate={{ rotate: isOpen ? 180 : 0 }}
           transition={{ duration: 0.2 }}
@@ -66,19 +83,28 @@ export function FileSelectorDropdown({
                       : "text-foreground"
                   )}
                 >
-                  <button
-                    onClick={() => {
-                      onSelect(file.id);
-                      setIsOpen(false);
-                    }}
-                    className="flex items-center gap-3 flex-1 text-left min-w-0"
-                  >
-                    <FileText className="w-4 h-4 flex-shrink-0" />
-                    <span className="truncate flex-1">{file.name}</span>
-                    {file.id === selectedId && (
-                      <Check className="w-4 h-4 text-primary flex-shrink-0" />
-                    )}
-                  </button>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          onClick={() => {
+                            onSelect(file.id);
+                            setIsOpen(false);
+                          }}
+                          className="flex items-center gap-3 flex-1 text-left min-w-0"
+                        >
+                          <FileText className="w-4 h-4 flex-shrink-0" />
+                          <span className="truncate flex-1">{file.name}</span>
+                          {file.id === selectedId && (
+                            <Check className="w-4 h-4 text-primary flex-shrink-0" />
+                          )}
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="max-w-xs break-words">{file.name}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                   {onRemove && (
                     <button
                       onClick={(e) => {

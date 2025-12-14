@@ -1,9 +1,10 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { FileText, Table, Sparkles, Loader2, RotateCcw } from "lucide-react";
+import { FileText, Table, Sparkles, Loader2, RotateCcw, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -73,6 +74,10 @@ export default function Workspace() {
   const [structuredData, setStructuredData] = useState<OrganizedStructuredData | null>(null);
   const [structureLoading, setStructureLoading] = useState<boolean>(false);
   const [structureError, setStructureError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [userExpandedAccordions, setUserExpandedAccordions] = useState<string[]>([]);
+  const structuredDataViewerRef = useRef<HTMLDivElement>(null);
+  const extractedTextPanelRef = useRef<HTMLDivElement>(null);
 
   const handlePageDimensions = useCallback((pageNum: number, width: number, height: number) => {
     setPageDimensions(prev => {
@@ -633,6 +638,274 @@ export default function Workspace() {
     [highlightLineById]
   );
 
+  // Build searchable index from raw text and structured data
+  type SearchResult = {
+    type: 'text' | 'structured';
+    value: string;
+    lineNumbers: number[];
+    path?: string; // For structured data: section/claim/category/field
+    elementId?: string; // For scrolling to element
+  };
+
+  const searchIndex = useMemo((): SearchResult[] => {
+    const searchIndexArray: SearchResult[] = [];
+
+    // Index raw text
+    if (layoutTextItems && layoutTextItems.length > 0) {
+      layoutTextItems.forEach((item, itemIndex) => {
+        if (item.text && item.text.trim()) {
+          // Use array index which corresponds to line number
+          searchIndexArray.push({
+            type: 'text',
+            value: item.text,
+            lineNumbers: [itemIndex],
+            elementId: item.id,
+          });
+        }
+      });
+    }
+
+    // Index structured data
+    if (structuredData && structuredData.sections) {
+      const { sections } = structuredData;
+
+      // Helper function to classify field key (same as in StructuredDataViewer)
+      const classifyFieldKey = (key: string): string => {
+        const normalizedKey = key.toLowerCase();
+        if (normalizedKey.includes("date") || normalizedKey.includes("reported") || normalizedKey.includes("notification")) {
+          return "Dates";
+        }
+        if (normalizedKey.includes("paid") || normalizedKey.includes("incurred") || normalizedKey.includes("reserve") || normalizedKey.includes("amount") || normalizedKey.includes("total")) {
+          return "Financials";
+        }
+        if (normalizedKey.includes("claimant") || normalizedKey.includes("insured") || normalizedKey.includes("party")) {
+          return "Parties";
+        }
+        if (normalizedKey.includes("description") || normalizedKey.includes("desc") || normalizedKey.includes("cause") || (normalizedKey.includes("loss") && !normalizedKey.includes("date"))) {
+          return "Description";
+        }
+        return "Other";
+      };
+
+      // Index Claims
+      if (sections.Claims) {
+        sections.Claims.forEach((claim, claimIdx) => {
+          // Get Claim Number for stable ID
+          const claimNumberValues = claim["Claim Number"] || claim["Claim #"] || [];
+          const claimNumber = claimNumberValues.length > 0 
+            ? claimNumberValues[0].value 
+            : `${claimIdx + 1}`;
+          
+          Object.entries(claim).forEach(([key, values]) => {
+            const category = classifyFieldKey(key);
+            values.forEach((item) => {
+              if (item.value && item.value.trim()) {
+                searchIndexArray.push({
+                  type: 'structured',
+                  value: item.value,
+                  lineNumbers: item.line_numbers || [],
+                  path: `Claims/Claim ${claimNumber}/${category}/${key}`,
+                  elementId: `claim-${claimNumber}-${key}`,
+                });
+              }
+            });
+          });
+        });
+      }
+
+      // Index Policy Info
+      if (sections["Policy Info"]) {
+        Object.entries(sections["Policy Info"]).forEach(([key, values]) => {
+          values.forEach((item) => {
+            if (item.value && item.value.trim()) {
+              searchIndexArray.push({
+                type: 'structured',
+                value: item.value,
+                lineNumbers: item.line_numbers || [],
+                path: `Policy Info/${key}`,
+                elementId: `policy-info-${key}`,
+              });
+            }
+          });
+        });
+      }
+
+      // Index Summary
+      if (sections.Summary) {
+        Object.entries(sections.Summary).forEach(([key, values]) => {
+          values.forEach((item) => {
+            if (item.value && item.value.trim()) {
+              searchIndexArray.push({
+                type: 'structured',
+                value: item.value,
+                lineNumbers: item.line_numbers || [],
+                path: `Summary/${key}`,
+                elementId: `summary-${key}`,
+              });
+            }
+          });
+        });
+      }
+
+      // Index Report Info
+      if (sections["Report Info"]) {
+        Object.entries(sections["Report Info"]).forEach(([key, values]) => {
+          values.forEach((item) => {
+            if (item.value && item.value.trim()) {
+              searchIndexArray.push({
+                type: 'structured',
+                value: item.value,
+                lineNumbers: item.line_numbers || [],
+                path: `Report Info/${key}`,
+                elementId: `report-info-${key}`,
+              });
+            }
+          });
+        });
+      }
+
+      // Index Other
+      if (sections.Other) {
+        Object.entries(sections.Other).forEach(([key, values]) => {
+          values.forEach((item) => {
+            if (item.value && item.value.trim()) {
+              searchIndexArray.push({
+                type: 'structured',
+                value: item.value,
+                lineNumbers: item.line_numbers || [],
+                path: `Other/${key}`,
+                elementId: `other-${key}`,
+              });
+            }
+          });
+        });
+      }
+    }
+
+    return searchIndexArray;
+  }, [layoutTextItems, structuredData, lineMetadata]);
+
+  // Search functionality
+  const searchResults = useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    
+    const query = searchQuery.toLowerCase();
+    return searchIndex.filter(item => 
+      item.value.toLowerCase().includes(query)
+    );
+  }, [searchQuery, searchIndex]);
+
+  // Derive search-expanded accordions from search results (temporary, only when search is active)
+  const searchExpandedAccordions = useMemo(() => {
+    if (!searchQuery.trim() || searchResults.length === 0) return [];
+    
+    const accordionIds: string[] = [];
+    
+    // Collect all unique accordion IDs from search results
+    searchResults.forEach(result => {
+      if (result.type === 'structured' && result.path) {
+        const pathParts = result.path.split('/');
+        
+        if (pathParts[0] === 'Claims') {
+          const claimMatch = pathParts[1]?.match(/Claim (\d+)/);
+          if (claimMatch) {
+            const claimNumber = claimMatch[1];
+            accordionIds.push(`claim-${claimNumber}`);
+            
+            // Category is in pathParts[2]
+            if (pathParts[2]) {
+              const category = pathParts[2].toLowerCase();
+              accordionIds.push(`claim-${claimNumber}-category-${category}`);
+            }
+          }
+        } else {
+          const sectionName = pathParts[0]?.toLowerCase().replace(/\s+/g, '-');
+          if (sectionName) {
+            accordionIds.push(sectionName);
+          }
+        }
+      }
+    });
+    
+    return [...new Set(accordionIds)];
+  }, [searchQuery, searchResults]);
+
+  // Effective accordion state: merge user + search when search is active
+  const effectiveExpandedAccordions = useMemo(() => {
+    if (searchQuery.trim() && searchExpandedAccordions.length > 0) {
+      // Merge user and search accordions, with search taking precedence
+      return [...new Set([...userExpandedAccordions, ...searchExpandedAccordions])];
+    }
+    // When no search, only use user-controlled state
+    return userExpandedAccordions;
+  }, [userExpandedAccordions, searchExpandedAccordions, searchQuery]);
+
+  // Handle search - when user types, auto-navigate to first result
+  useEffect(() => {
+    if (!searchQuery.trim() || searchResults.length === 0) return;
+    
+    const firstResult = searchResults[0];
+    
+    // Scroll to element after accordions expand
+    if (firstResult.type === 'structured') {
+      setTimeout(() => {
+        if (firstResult.elementId && structuredDataViewerRef.current) {
+          const element = document.querySelector(`[data-search-id="${firstResult.elementId}"]`);
+          if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }
+      }, 300);
+      
+      // Highlight in PDF
+      if (firstResult.lineNumbers && firstResult.lineNumbers.length > 0) {
+        handleStructuredHighlight(firstResult.lineNumbers, true);
+      }
+    } else if (firstResult.type === 'text') {
+      // Scroll to line in raw text
+      setTimeout(() => {
+        if (firstResult.elementId && extractedTextPanelRef.current) {
+          const element = document.getElementById(firstResult.elementId);
+          if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }
+      }, 100);
+      
+      // Highlight in PDF
+      if (firstResult.lineNumbers && firstResult.lineNumbers.length > 0) {
+        const lineIndex = firstResult.lineNumbers[0];
+        if (lineMetadata && lineMetadata[lineIndex]) {
+          highlightLineById(lineIndex)
+            .then(bbox => {
+              setActiveBoundingBox(bbox);
+              setTimeout(() => setActiveBoundingBox(null), 5000);
+            })
+            .catch(e => {
+              console.warn("[Workspace] Failed to highlight line:", e);
+            });
+        }
+      }
+    }
+  }, [searchQuery, searchResults, handleStructuredHighlight, highlightLineById, lineMetadata]);
+
+  // Auto-switch tab based on search results
+  useEffect(() => {
+    if (!searchQuery.trim() || searchResults.length === 0) return;
+    
+    const hasStructured = searchResults.some(r => r.type === 'structured');
+    const hasText = searchResults.some(r => r.type === 'text');
+    
+    if (hasStructured && !hasText) {
+      setActiveTab('tables');
+    } else if (hasText && !hasStructured) {
+      setActiveTab('text');
+    } else if (hasStructured && hasText) {
+      // If both exist, prefer structured data
+      setActiveTab('tables');
+    }
+  }, [searchQuery, searchResults]);
+
   const renderTabContent = () => {
     switch (activeTab) {
       case "text":
@@ -641,6 +914,7 @@ export default function Workspace() {
             items={layoutTextItems}
             onItemHover={handleItemHover}
             onItemClick={handleItemClick}
+            searchQuery={searchQuery}
           />
         );
       case "tables":
@@ -670,6 +944,9 @@ export default function Workspace() {
                 sections={structuredData.sections}
                 skipped_items={[]} // No skipped items in new format - everything is preserved
                 onHighlight={handleStructuredHighlight}
+                expandedAccordions={effectiveExpandedAccordions}
+                onAccordionChange={setUserExpandedAccordions}
+                searchQuery={searchQuery}
               />
             )}
           </div>
@@ -822,30 +1099,62 @@ export default function Workspace() {
               </Button>
             </div>
 
-            {/* Tabs */}
-            <div className="flex items-center gap-1 p-4 border-b border-border/50">
-              {tabs.map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={cn(
-                    "relative flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200",
-                    activeTab === tab.id
-                      ? "text-primary"
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+            {/* Tabs and Search */}
+            <div className="flex items-center justify-between gap-4 p-4 border-b border-border/50">
+              {/* Tabs */}
+              <div className="flex items-center gap-1">
+                {tabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={cn(
+                      "relative flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200",
+                      activeTab === tab.id
+                        ? "text-primary"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                    )}
+                  >
+                    <tab.icon className="w-4 h-4" />
+                    <span className="hidden sm:inline">{tab.label}</span>
+                    {activeTab === tab.id && (
+                      <motion.div
+                        layoutId="tab-indicator"
+                        className="absolute inset-0 rounded-xl bg-primary/10 border border-primary/30"
+                        transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                      />
+                    )}
+                  </button>
+                ))}
+              </div>
+              
+              {/* Search Input */}
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <div className="relative w-64">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    type="text"
+                    placeholder="Search..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10 pr-10"
+                  />
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery("")}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
                   )}
-                >
-                  <tab.icon className="w-4 h-4" />
-                  <span className="hidden sm:inline">{tab.label}</span>
-                  {activeTab === tab.id && (
-                    <motion.div
-                      layoutId="tab-indicator"
-                      className="absolute inset-0 rounded-xl bg-primary/10 border border-primary/30"
-                      transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
-                    />
-                  )}
-                </button>
-              ))}
+                </div>
+                {searchQuery && (
+                  <div className="text-xs text-muted-foreground whitespace-nowrap">
+                    {searchResults.length > 0 
+                      ? `${searchResults.length} ${searchResults.length === 1 ? 'result' : 'results'}`
+                      : 'No results'}
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Tab Content */}
@@ -859,7 +1168,15 @@ export default function Workspace() {
                   transition={{ duration: 0.2 }}
                   className="min-w-max"
                 >
-                  {renderTabContent()}
+                  {activeTab === 'text' ? (
+                    <div ref={extractedTextPanelRef}>
+                      {renderTabContent()}
+                    </div>
+                  ) : (
+                    <div ref={structuredDataViewerRef}>
+                      {renderTabContent()}
+                    </div>
+                  )}
                 </motion.div>
               </AnimatePresence>
             </div>

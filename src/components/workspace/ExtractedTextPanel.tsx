@@ -7,6 +7,7 @@ interface ExtractedTextPanelProps {
   items: LayoutText[];
   onItemHover: (boundingBox: BoundingBox | null) => void;
   onItemClick: (boundingBox: BoundingBox, item: LayoutText, index: number) => void;
+  searchQuery?: string;
 }
 
 const iconMap = {
@@ -19,7 +20,29 @@ export function ExtractedTextPanel({
   items,
   onItemHover,
   onItemClick,
+  searchQuery = "",
 }: ExtractedTextPanelProps) {
+  const highlightMatch = (text: string, query: string) => {
+    if (!query.trim()) return text;
+    
+    const lowerText = text.toLowerCase();
+    const lowerQuery = query.toLowerCase();
+    const index = lowerText.indexOf(lowerQuery);
+    
+    if (index === -1) return text;
+    
+    const before = text.substring(0, index);
+    const match = text.substring(index, index + query.length);
+    const after = text.substring(index + query.length);
+    
+    return (
+      <>
+        {before}
+        <mark className="bg-primary/20 text-primary font-medium">{match}</mark>
+        {after}
+      </>
+    );
+  };
   return (
     <div className="space-y-3">
       {items.map((item, index) => {
@@ -48,7 +71,7 @@ export function ExtractedTextPanel({
                 </span>
                 <div className="overflow-x-auto -mx-4 px-4">
                   <p className="text-sm text-foreground leading-relaxed whitespace-pre font-mono" style={{ minWidth: 'max-content' }}>
-                    {item.text}
+                    {highlightMatch(item.text, searchQuery)}
                   </p>
                 </div>
               </div>

@@ -24,6 +24,11 @@ export interface StructuredDataViewerProps {
     reason: string;
   }>;
   onHighlight: HighlightHandler;
+  expandedAccordions?: string[];
+  onAccordionChange?: (value: string[]) => void;
+  searchQuery?: string;
+  onSearchResultClick?: (result: any) => void;
+  searchResults?: any[];
 }
 
 const sectionCard = "rounded-lg border border-border/50 bg-muted/30 p-4";
@@ -149,6 +154,9 @@ const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({
   sections,
   skipped_items = [],
   onHighlight,
+  expandedAccordions = [],
+  onAccordionChange,
+  searchQuery = "",
 }) => {
   if (!sections || Object.keys(sections).length === 0) {
     return (
@@ -175,13 +183,30 @@ const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({
           </span>
         </div>
 
-        <Accordion type="multiple" defaultValue={claims.map((_, idx) => `claim-${idx}`)} className="w-full">
+        <Accordion 
+          type="multiple" 
+          value={expandedAccordions.filter(id => {
+            // Match claim-{number} but not claim-{number}-category-{category}
+            return /^claim-\d+$/.test(id);
+          })}
+          onValueChange={(value) => {
+            if (onAccordionChange) {
+              // Get current category accordions
+              const categoryAccordions = expandedAccordions.filter(id => 
+                /^claim-\d+-category-/.test(id)
+              );
+              // Merge with new claim accordions
+              onAccordionChange([...value, ...categoryAccordions]);
+            }
+          }}
+          className="w-full"
+        >
           {claims.map((claim, claimIdx) => {
-            // Get Claim Number for display
+            // Get Claim Number for display and use it as stable ID
             const claimNumberValues = claim["Claim Number"] || claim["Claim #"] || [];
             const claimNumber = claimNumberValues.length > 0 
               ? claimNumberValues[0].value 
-              : `Claim ${claimIdx + 1}`;
+              : `${claimIdx + 1}`;
 
             // Separate Claim Number from other fields
             const claimKeys = Object.keys(claim).filter(
@@ -217,7 +242,7 @@ const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({
               .map(([category, fields]) => ({ category, fields }));
 
             return (
-              <AccordionItem key={claimIdx} value={`claim-${claimIdx}`} className="border-b border-border/50">
+              <AccordionItem key={claimIdx} value={`claim-${claimNumber}`} className="border-b border-border/50">
                 <AccordionTrigger className="text-sm font-medium hover:no-underline">
                   <div className="flex items-center gap-2">
                     <span>Claim {claimNumber}</span>
@@ -264,11 +289,32 @@ const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({
 
                     {/* Nested accordions for field categories */}
                     {hasFields && (
-                      <Accordion type="multiple" className="w-full">
+                      <Accordion 
+                        type="multiple" 
+                        value={expandedAccordions.filter(id => id.startsWith(`claim-${claimNumber}-category-`))}
+                        onValueChange={(value) => {
+                          if (onAccordionChange) {
+                            // Get current claim accordions and other category accordions
+                            const claimAccordions = expandedAccordions.filter(id => 
+                              id === `claim-${claimNumber}` || (/^claim-\d+$/.test(id) && id !== `claim-${claimNumber}`)
+                            );
+                            const otherCategoryAccordions = expandedAccordions.filter(id => 
+                              !id.startsWith(`claim-${claimNumber}-category-`)
+                            );
+                            // Map category values to full IDs
+                            const categoryIds = value.map(v => 
+                              v.startsWith(`claim-${claimNumber}-category-`) ? v : `claim-${claimNumber}-category-${v}`
+                            );
+                            // Merge all accordions
+                            onAccordionChange([...claimAccordions, ...otherCategoryAccordions, ...categoryIds]);
+                          }
+                        }}
+                        className="w-full"
+                      >
                         {nonEmptyCategories.map(({ category, fields }) => (
                           <AccordionItem
                             key={category}
-                            value={`claim-${claimIdx}-${category.toLowerCase()}`}
+                            value={`claim-${claimNumber}-category-${category.toLowerCase()}`}
                             className="border-b border-border/30"
                           >
                             <AccordionTrigger className="text-xs font-medium hover:no-underline py-2">
@@ -277,26 +323,32 @@ const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({
                             <AccordionContent>
                               <div className="space-y-3 pt-2 pl-2">
                                 {fields.map(({ key, values }) => (
-                                  <div key={key} className="space-y-1">
+                                  <div key={key} className="space-y-1" data-search-id={`claim-${claimNumber}-${key}`}>
                                     <div className="text-xs font-medium text-muted-foreground">
                                       {formatKey(key)}:
                                     </div>
                                     <div className="space-y-1 pl-2">
-                                      {values.map((item, valueIdx) => (
-                                        <div
-                                          key={valueIdx}
-                                          className="text-sm flex items-start gap-2"
-                                        >
-                                          <span className="text-muted-foreground">•</span>
-                                          <HighlightValue
-                                            lineNumbers={item.line_numbers}
-                                            onHighlight={onHighlight}
-                                            showLineNumbers={true}
+                                      {values.map((item, valueIdx) => {
+                                        const isMatch = searchQuery && item.value.toLowerCase().includes(searchQuery.toLowerCase());
+                                        return (
+                                          <div
+                                            key={valueIdx}
+                                            className={cn(
+                                              "text-sm flex items-start gap-2",
+                                              isMatch && "bg-primary/10 rounded px-1"
+                                            )}
                                           >
-                                            {item.value}
-                                          </HighlightValue>
-                                        </div>
-                                      ))}
+                                            <span className="text-muted-foreground">•</span>
+                                            <HighlightValue
+                                              lineNumbers={item.line_numbers}
+                                              onHighlight={onHighlight}
+                                              showLineNumbers={true}
+                                            >
+                                              {item.value}
+                                            </HighlightValue>
+                                          </div>
+                                        );
+                                      })}
                                     </div>
                                   </div>
                                 ))}
@@ -325,10 +377,29 @@ const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({
 
     const fieldKeys = Object.keys(fields).sort();
 
+    const sectionId = title.toLowerCase().replace(/\s+/g, "-");
+    
     return (
       <div className={sectionCard}>
-        <Accordion type="single" collapsible className="w-full">
-          <AccordionItem value={title.toLowerCase().replace(/\s+/g, "-")} className="border-none">
+        <Accordion 
+          type="single" 
+          collapsible 
+          value={expandedAccordions.includes(sectionId) ? sectionId : undefined}
+          onValueChange={(value) => {
+            if (onAccordionChange) {
+              // Get all other accordions
+              const otherAccordions = expandedAccordions.filter(id => id !== sectionId);
+              // Add or remove this section
+              if (value) {
+                onAccordionChange([...otherAccordions, value]);
+              } else {
+                onAccordionChange(otherAccordions);
+              }
+            }
+          }}
+          className="w-full"
+        >
+          <AccordionItem value={sectionId} className="border-none">
             <AccordionTrigger className="text-sm font-semibold hover:no-underline py-2">
               <div className="flex items-center justify-between w-full pr-4">
                 <span>{title}</span>
@@ -344,23 +415,32 @@ const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({
                   if (valueList.length === 0) return null;
 
                   return (
-                    <div key={key} className="flex flex-col space-y-1">
+                    <div key={key} className="flex flex-col space-y-1" data-search-id={`${sectionId}-${key}`}>
                       <span className="text-muted-foreground text-xs font-medium">
                         {formatKey(key)}
                       </span>
                       <div className="space-y-1">
-                        {valueList.map((item, valueIdx) => (
-                          <div key={valueIdx} className="flex items-start gap-2">
-                            <span className="text-muted-foreground text-xs">•</span>
-                            <HighlightValue
-                              lineNumbers={item.line_numbers}
-                              onHighlight={onHighlight}
-                              showLineNumbers={true}
+                        {valueList.map((item, valueIdx) => {
+                          const isMatch = searchQuery && item.value.toLowerCase().includes(searchQuery.toLowerCase());
+                          return (
+                            <div 
+                              key={valueIdx} 
+                              className={cn(
+                                "flex items-start gap-2",
+                                isMatch && "bg-primary/10 rounded px-1"
+                              )}
                             >
-                              {item.value}
-                            </HighlightValue>
-                          </div>
-                        ))}
+                              <span className="text-muted-foreground text-xs">•</span>
+                              <HighlightValue
+                                lineNumbers={item.line_numbers}
+                                onHighlight={onHighlight}
+                                showLineNumbers={true}
+                              >
+                                {item.value}
+                              </HighlightValue>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   );
@@ -444,7 +524,24 @@ const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({
 
     return (
       <div className={sectionCard}>
-        <Accordion type="single" collapsible className="w-full">
+        <Accordion 
+          type="single" 
+          collapsible 
+          value={expandedAccordions.includes("other-unclassified") ? "other-unclassified" : undefined}
+          onValueChange={(value) => {
+            if (onAccordionChange) {
+              // Get all other accordions
+              const otherAccordions = expandedAccordions.filter(id => id !== "other-unclassified");
+              // Add or remove this section
+              if (value) {
+                onAccordionChange([...otherAccordions, value]);
+              } else {
+                onAccordionChange(otherAccordions);
+              }
+            }
+          }}
+          className="w-full"
+        >
           <AccordionItem value="other-unclassified" className="border-none">
             <AccordionTrigger className="text-sm font-semibold hover:no-underline py-2">
               <div className="flex items-center justify-between w-full pr-4">
@@ -463,23 +560,32 @@ const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm pl-2">
                       {fields.map(({ key, values }) => (
-                        <div key={key} className="flex flex-col space-y-1">
+                        <div key={key} className="flex flex-col space-y-1" data-search-id={`other-${key}`}>
                           <span className="text-muted-foreground text-xs font-medium">
                             {formatKey(key)}
                           </span>
                           <div className="space-y-1">
-                            {values.map((item, valueIdx) => (
-                              <div key={valueIdx} className="flex items-start gap-2">
-                                <span className="text-muted-foreground text-xs">•</span>
-                                <HighlightValue
-                                  lineNumbers={item.line_numbers}
-                                  onHighlight={onHighlight}
-                                  showLineNumbers={true}
+                            {values.map((item, valueIdx) => {
+                              const isMatch = searchQuery && item.value.toLowerCase().includes(searchQuery.toLowerCase());
+                              return (
+                                <div 
+                                  key={valueIdx} 
+                                  className={cn(
+                                    "flex items-start gap-2",
+                                    isMatch && "bg-primary/10 rounded px-1"
+                                  )}
                                 >
-                                  {item.value}
-                                </HighlightValue>
-                              </div>
-                            ))}
+                                  <span className="text-muted-foreground text-xs">•</span>
+                                  <HighlightValue
+                                    lineNumbers={item.line_numbers}
+                                    onHighlight={onHighlight}
+                                    showLineNumbers={true}
+                                  >
+                                    {item.value}
+                                  </HighlightValue>
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       ))}
