@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { ZoomIn, ZoomOut, RotateCw, Maximize2, ChevronUp, ChevronDown } from "lucide-react";
+import { ZoomIn, ZoomOut, RotateCw, Maximize2, ChevronUp, ChevronDown, Minimize2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BoundingBox } from "@/types/document";
 import { HighlightOverlay } from "./HighlightOverlay";
@@ -29,11 +29,113 @@ export function PDFViewerWrapper({
   const [totalPages, setTotalPages] = useState(0);
   const [pdfDoc, setPdfDoc] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
   const [canvasDimensions, setCanvasDimensions] = useState<Map<number, { width: number, height: number }>>(new Map());
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const pdfViewerAreaRef = useRef<HTMLDivElement>(null);
   const canvasRefs = useRef<Map<number, HTMLCanvasElement>>(new Map());
 
   const handleZoomIn = () => setZoom((prev) => Math.min(prev + 25, 200));
   const handleZoomOut = () => setZoom((prev) => Math.max(prev - 25, 50));
+
+  // Reset View: Reset zoom to 100%, scroll to top-left, go to page 1
+  const handleResetView = useCallback(() => {
+    // Reset zoom to 100%
+    setZoom(100);
+    
+    // Reset page to 1
+    setCurrentPage(1);
+    
+    // Reset scroll position to top-left
+    if (containerRef.current) {
+      containerRef.current.scrollTo({
+        top: 0,
+        left: 0,
+        behavior: 'smooth'
+      });
+      
+      // Also scroll to page 1 element after a brief delay to ensure zoom has updated
+      setTimeout(() => {
+        scrollToPage(1);
+      }, 100);
+    }
+  }, []);
+
+  // Fullscreen toggle
+  const handleToggleFullscreen = useCallback(async () => {
+    if (!pdfViewerAreaRef.current) return;
+
+    try {
+      if (!isFullscreen) {
+        // Enter fullscreen
+        if (pdfViewerAreaRef.current.requestFullscreen) {
+          await pdfViewerAreaRef.current.requestFullscreen();
+        } else if ((pdfViewerAreaRef.current as any).webkitRequestFullscreen) {
+          // Safari support
+          await (pdfViewerAreaRef.current as any).webkitRequestFullscreen();
+        } else if ((pdfViewerAreaRef.current as any).mozRequestFullScreen) {
+          // Firefox support
+          await (pdfViewerAreaRef.current as any).mozRequestFullScreen();
+        } else if ((pdfViewerAreaRef.current as any).msRequestFullscreen) {
+          // IE/Edge support
+          await (pdfViewerAreaRef.current as any).msRequestFullscreen();
+        }
+      } else {
+        // Exit fullscreen
+        if (document.exitFullscreen) {
+          await document.exitFullscreen();
+        } else if ((document as any).webkitExitFullscreen) {
+          await (document as any).webkitExitFullscreen();
+        } else if ((document as any).mozCancelFullScreen) {
+          await (document as any).mozCancelFullScreen();
+        } else if ((document as any).msExitFullscreen) {
+          await (document as any).msExitFullscreen();
+        }
+      }
+    } catch (error) {
+      console.error("[PDFViewerWrapper] Fullscreen error:", error);
+    }
+  }, [isFullscreen]);
+
+  // Track fullscreen state changes
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const isCurrentlyFullscreen = !!(
+        document.fullscreenElement ||
+        (document as any).webkitFullscreenElement ||
+        (document as any).mozFullScreenElement ||
+        (document as any).msFullscreenElement
+      );
+      setIsFullscreen(isCurrentlyFullscreen);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+    document.addEventListener('MSFullscreenChange', handleFullscreenChange);
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
+    };
+  }, []);
+
+  // Handle Esc key to exit fullscreen
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isFullscreen) {
+        handleToggleFullscreen();
+      }
+    };
+
+    if (isFullscreen) {
+      document.addEventListener('keydown', handleKeyDown);
+      return () => {
+        document.removeEventListener('keydown', handleKeyDown);
+      };
+    }
+  }, [isFullscreen, handleToggleFullscreen]);
 
   // Page navigation handlers
   const handlePageInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -203,7 +305,13 @@ export function PDFViewerWrapper({
   }, [totalPages, currentPage]);
 
   return (
-    <div className="h-full flex flex-col">
+    <div 
+      ref={pdfViewerAreaRef}
+      className={cn(
+        "h-full flex flex-col",
+        isFullscreen && "fixed inset-0 z-50 bg-background"
+      )}
+    >
       {/* Toolbar */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
         <div className="flex items-center gap-2">
@@ -255,11 +363,23 @@ export function PDFViewerWrapper({
             <ZoomIn className="w-4 h-4" />
           </button>
           <div className="w-px h-5 bg-border mx-2" />
-          <button className="p-2 rounded-lg hover:bg-muted/50 transition-colors text-muted-foreground hover:text-foreground">
+          <button 
+            onClick={handleResetView}
+            className="p-2 rounded-lg hover:bg-muted/50 transition-colors text-muted-foreground hover:text-foreground"
+            title="Reset view (zoom 100%, page 1, top)"
+          >
             <RotateCw className="w-4 h-4" />
           </button>
-          <button className="p-2 rounded-lg hover:bg-muted/50 transition-colors text-muted-foreground hover:text-foreground">
-            <Maximize2 className="w-4 h-4" />
+          <button 
+            onClick={handleToggleFullscreen}
+            className="p-2 rounded-lg hover:bg-muted/50 transition-colors text-muted-foreground hover:text-foreground"
+            title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+          >
+            {isFullscreen ? (
+              <Minimize2 className="w-4 h-4" />
+            ) : (
+              <Maximize2 className="w-4 h-4" />
+            )}
           </button>
         </div>
       </div>
