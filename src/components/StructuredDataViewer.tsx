@@ -46,20 +46,68 @@ function formatKey(key: string): string {
 }
 
 /**
- * Checks if a value should be right-aligned (typically numbers)
+ * Classify a field key into a category for nested accordion grouping
  */
-function isNumericValue(value: string): boolean {
-  return /^-?\d+\.?\d*$/.test(value.trim());
+function classifyFieldKey(key: string, semanticType?: string): string {
+  const normalizedKey = key.toLowerCase();
+  
+  // Dates
+  if (
+    normalizedKey.includes("date") ||
+    normalizedKey.includes("loss") && normalizedKey.includes("date") ||
+    normalizedKey.includes("reported") ||
+    normalizedKey.includes("notification")
+  ) {
+    return "Dates";
+  }
+  
+  // Financials
+  if (
+    normalizedKey.includes("paid") ||
+    normalizedKey.includes("incurred") ||
+    normalizedKey.includes("reserve") ||
+    normalizedKey.includes("amount") ||
+    normalizedKey.includes("total") ||
+    semanticType?.includes("paid") ||
+    semanticType?.includes("financial")
+  ) {
+    return "Financials";
+  }
+  
+  // Parties
+  if (
+    normalizedKey.includes("claimant") ||
+    normalizedKey.includes("insured") ||
+    normalizedKey.includes("party") ||
+    semanticType?.includes("claimant")
+  ) {
+    return "Parties";
+  }
+  
+  // Description
+  if (
+    normalizedKey.includes("description") ||
+    normalizedKey.includes("desc") ||
+    normalizedKey.includes("cause") ||
+    normalizedKey.includes("loss") && !normalizedKey.includes("date")
+  ) {
+    return "Description";
+  }
+  
+  // Default to Other
+  return "Other";
 }
 
 function HighlightValue({
   children,
   lineNumbers,
   onHighlight,
+  showLineNumbers = false,
 }: {
   children: React.ReactNode;
   lineNumbers: number[];
   onHighlight: HighlightHandler;
+  showLineNumbers?: boolean;
 }) {
   const clickable = lineNumbers && lineNumbers.length > 0;
 
@@ -74,12 +122,24 @@ function HighlightValue({
     onHighlight(lineNumbers, true); // true indicates this is the first/primary highlight
   };
 
+  // Format: [line 45] or [line 45, 46, 47]
+  const lineNumbersText = lineNumbers.length > 0 
+    ? lineNumbers.length === 1
+      ? `[line ${lineNumbers[0]}]`
+      : `[line ${lineNumbers.join(", ")}]`
+    : "";
+
   return (
     <span
-      className={cn(clickable ? cellHighlight : "")}
+      className={cn(clickable ? cellHighlight : "", "flex items-center gap-1")}
       onClick={clickable ? handleClick : undefined}
       title={clickable ? "Click to highlight source text" : undefined}
     >
+      {showLineNumbers && lineNumbersText && (
+        <span className="text-xs text-muted-foreground font-mono">
+          {lineNumbersText}
+        </span>
+      )}
       {children ?? "—"}
     </span>
   );
@@ -100,7 +160,7 @@ const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({
     );
   }
 
-  // Render Claims section with accordion per claim
+  // Render Claims section with accordion per claim and nested accordions
   const renderClaimsSection = (
     claims: Array<Record<string, Array<{ value: string; line_numbers: number[] }>>>
   ) => {
@@ -123,12 +183,38 @@ const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({
               ? claimNumberValues[0].value 
               : `Claim ${claimIdx + 1}`;
 
+            // Separate Claim Number from other fields
             const claimKeys = Object.keys(claim).filter(
               (key) => key !== "Claim Number" && key !== "Claim #"
             );
-            const allKeys = ["Claim Number", ...claimKeys].filter(
-              (key) => claim[key] && claim[key].length > 0
-            );
+            
+            // Check if claim has any fields beyond Claim Number
+            const hasFields = claimKeys.some(key => claim[key] && claim[key].length > 0);
+
+            // Group fields by category for nested accordions
+            const fieldsByCategory: Record<string, Array<{ key: string; values: Array<{ value: string; line_numbers: number[] }> }>> = {
+              Dates: [],
+              Financials: [],
+              Parties: [],
+              Description: [],
+              Other: [],
+            };
+
+            for (const key of claimKeys) {
+              const valueList = claim[key] || [];
+              if (valueList.length === 0) continue;
+
+              const category = classifyFieldKey(key);
+              fieldsByCategory[category].push({
+                key,
+                values: valueList,
+              });
+            }
+
+            // Remove empty categories
+            const nonEmptyCategories = Object.entries(fieldsByCategory)
+              .filter(([_, fields]) => fields.length > 0)
+              .map(([category, fields]) => ({ category, fields }));
 
             return (
               <AccordionItem key={claimIdx} value={`claim-${claimIdx}`} className="border-b border-border/50">
@@ -136,40 +222,90 @@ const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({
                   <div className="flex items-center gap-2">
                     <span>Claim {claimNumber}</span>
                     <span className="text-xs text-muted-foreground font-normal">
-                      ({allKeys.length - 1} fields)
+                      ({hasFields ? nonEmptyCategories.length : 0} categories)
                     </span>
                   </div>
                 </AccordionTrigger>
                 <AccordionContent>
                   <div className="space-y-4 pt-2">
-                    {allKeys.map((key) => {
-                      const valueList = claim[key] || [];
-                      if (valueList.length === 0) return null;
-
-                      return (
-                        <div key={key} className="space-y-1">
-                          <div className="text-xs font-medium text-muted-foreground">
-                            {formatKey(key)}:
-                          </div>
-                          <div className="space-y-1 pl-2">
-                            {valueList.map((item, valueIdx) => (
-                              <div
-                                key={valueIdx}
-                                className="text-sm flex items-start gap-2"
-                              >
-                                <span className="text-muted-foreground">•</span>
-                                <HighlightValue
-                                  lineNumbers={item.line_numbers}
-                                  onHighlight={onHighlight}
-                                >
-                                  {item.value}
-                                </HighlightValue>
-                              </div>
-                            ))}
-                          </div>
+                    {/* Claim Number (always shown) */}
+                    {claimNumberValues.length > 0 && (
+                      <div className="space-y-1 pb-2 border-b border-border/30">
+                        <div className="text-xs font-medium text-muted-foreground">
+                          Claim Number:
                         </div>
-                      );
-                    })}
+                        <div className="space-y-1 pl-2">
+                          {claimNumberValues.map((item, valueIdx) => (
+                            <div
+                              key={valueIdx}
+                              className="text-sm flex items-start gap-2"
+                            >
+                              <span className="text-muted-foreground">•</span>
+                              <HighlightValue
+                                lineNumbers={item.line_numbers}
+                                onHighlight={onHighlight}
+                                showLineNumbers={true}
+                              >
+                                {item.value}
+                              </HighlightValue>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Show message if no fields */}
+                    {!hasFields && (
+                      <div className="text-sm text-muted-foreground italic py-2">
+                        No safely associated fields found for this claim.
+                        Related values may appear in "Other / Unclassified".
+                      </div>
+                    )}
+
+                    {/* Nested accordions for field categories */}
+                    {hasFields && (
+                      <Accordion type="multiple" className="w-full">
+                        {nonEmptyCategories.map(({ category, fields }) => (
+                          <AccordionItem
+                            key={category}
+                            value={`claim-${claimIdx}-${category.toLowerCase()}`}
+                            className="border-b border-border/30"
+                          >
+                            <AccordionTrigger className="text-xs font-medium hover:no-underline py-2">
+                              {category} ({fields.length} {fields.length === 1 ? "field" : "fields"})
+                            </AccordionTrigger>
+                            <AccordionContent>
+                              <div className="space-y-3 pt-2 pl-2">
+                                {fields.map(({ key, values }) => (
+                                  <div key={key} className="space-y-1">
+                                    <div className="text-xs font-medium text-muted-foreground">
+                                      {formatKey(key)}:
+                                    </div>
+                                    <div className="space-y-1 pl-2">
+                                      {values.map((item, valueIdx) => (
+                                        <div
+                                          key={valueIdx}
+                                          className="text-sm flex items-start gap-2"
+                                        >
+                                          <span className="text-muted-foreground">•</span>
+                                          <HighlightValue
+                                            lineNumbers={item.line_numbers}
+                                            onHighlight={onHighlight}
+                                            showLineNumbers={true}
+                                          >
+                                            {item.value}
+                                          </HighlightValue>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </AccordionContent>
+                          </AccordionItem>
+                        ))}
+                      </Accordion>
+                    )}
                   </div>
                 </AccordionContent>
               </AccordionItem>
@@ -180,7 +316,7 @@ const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({
     );
   };
 
-  // Render flat section (Policy Info, Summary, Report Info, Other) with accordion
+  // Render flat section (Policy Info, Summary, Report Info) with accordion
   const renderFlatSection = (
     title: string,
     fields: Record<string, Array<{ value: string; line_numbers: number[] }>>
@@ -219,6 +355,7 @@ const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({
                             <HighlightValue
                               lineNumbers={item.line_numbers}
                               onHighlight={onHighlight}
+                              showLineNumbers={true}
                             >
                               {item.value}
                             </HighlightValue>
@@ -228,6 +365,127 @@ const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({
                     </div>
                   );
                 })}
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+      </div>
+    );
+  };
+
+  // Render Other section with visual grouping (Dates, Amounts, Names, Codes, Free text)
+  const renderOtherSection = (
+    fields: Record<string, Array<{ value: string; line_numbers: number[] }>>
+  ) => {
+    if (!fields || Object.keys(fields).length === 0) return null;
+
+    const fieldKeys = Object.keys(fields);
+
+    // Group fields by visual category (for readability only, no data loss)
+    const groupedFields: Record<string, Array<{ key: string; values: Array<{ value: string; line_numbers: number[] }> }>> = {
+      Dates: [],
+      Amounts: [],
+      Names: [],
+      Codes: [],
+      "Free text": [],
+    };
+
+    for (const key of fieldKeys) {
+      const valueList = fields[key] || [];
+      if (valueList.length === 0) continue;
+
+      const normalizedKey = key.toLowerCase();
+      const firstValue = valueList[0].value.toLowerCase();
+
+      // Classify for visual grouping
+      let category = "Free text";
+      if (
+        normalizedKey.includes("date") ||
+        normalizedKey.includes("time") ||
+        /^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(firstValue) ||
+        /^\d{4}-\d{2}-\d{2}$/.test(firstValue)
+      ) {
+        category = "Dates";
+      } else if (
+        normalizedKey.includes("amount") ||
+        normalizedKey.includes("paid") ||
+        normalizedKey.includes("total") ||
+        normalizedKey.includes("cost") ||
+        /^\$?[\d,]+\.?\d*$/.test(firstValue) ||
+        /^\d+\.\d{2}$/.test(firstValue)
+      ) {
+        category = "Amounts";
+      } else if (
+        normalizedKey.includes("name") ||
+        normalizedKey.includes("claimant") ||
+        normalizedKey.includes("insured") ||
+        /^[A-Z][a-z]+ [A-Z]/.test(firstValue) // Looks like a name
+      ) {
+        category = "Names";
+      } else if (
+        normalizedKey.includes("code") ||
+        normalizedKey.includes("id") ||
+        normalizedKey.includes("number") ||
+        /^[A-Z0-9-]{3,}$/.test(firstValue) // Looks like a code
+      ) {
+        category = "Codes";
+      }
+
+      groupedFields[category].push({
+        key,
+        values: valueList,
+      });
+    }
+
+    // Remove empty categories
+    const nonEmptyGroups = Object.entries(groupedFields)
+      .filter(([_, fields]) => fields.length > 0)
+      .map(([category, fields]) => ({ category, fields }));
+
+    return (
+      <div className={sectionCard}>
+        <Accordion type="single" collapsible className="w-full">
+          <AccordionItem value="other-unclassified" className="border-none">
+            <AccordionTrigger className="text-sm font-semibold hover:no-underline py-2">
+              <div className="flex items-center justify-between w-full pr-4">
+                <span>Other / Unclassified</span>
+                <span className="text-xs text-muted-foreground font-normal">
+                  {fieldKeys.length} {fieldKeys.length === 1 ? "field" : "fields"}
+                </span>
+              </div>
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="space-y-4 pt-2">
+                {nonEmptyGroups.map(({ category, fields }) => (
+                  <div key={category} className="space-y-2">
+                    <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      {category}
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm pl-2">
+                      {fields.map(({ key, values }) => (
+                        <div key={key} className="flex flex-col space-y-1">
+                          <span className="text-muted-foreground text-xs font-medium">
+                            {formatKey(key)}
+                          </span>
+                          <div className="space-y-1">
+                            {values.map((item, valueIdx) => (
+                              <div key={valueIdx} className="flex items-start gap-2">
+                                <span className="text-muted-foreground text-xs">•</span>
+                                <HighlightValue
+                                  lineNumbers={item.line_numbers}
+                                  onHighlight={onHighlight}
+                                  showLineNumbers={true}
+                                >
+                                  {item.value}
+                                </HighlightValue>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
             </AccordionContent>
           </AccordionItem>
@@ -252,8 +510,8 @@ const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({
       {/* Summary Section - Collapsed by default */}
       {sections.Summary && renderFlatSection("Summary", sections.Summary)}
 
-      {/* Other Section - Collapsed by default, REQUIRED */}
-      {sections.Other && renderFlatSection("Other / Unclassified", sections.Other)}
+      {/* Other Section - Collapsed by default, REQUIRED, with visual grouping */}
+      {sections.Other && renderOtherSection(sections.Other)}
 
       {/* Skipped Items Section - Only if items exist (should be empty in new format) */}
       {skipped_items && skipped_items.length > 0 && (
@@ -278,6 +536,7 @@ const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({
                           <HighlightValue
                             lineNumbers={item.line_numbers}
                             onHighlight={onHighlight}
+                            showLineNumbers={true}
                           >
                             {item.value}
                           </HighlightValue>
