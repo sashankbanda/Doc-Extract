@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
-import { ZoomIn, ZoomOut, RotateCw, Maximize2 } from "lucide-react";
+import { ZoomIn, ZoomOut, RotateCw, Maximize2, ChevronUp, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BoundingBox } from "@/types/document";
 import { HighlightOverlay } from "./HighlightOverlay";
@@ -34,6 +34,56 @@ export function PDFViewerWrapper({
 
   const handleZoomIn = () => setZoom((prev) => Math.min(prev + 25, 200));
   const handleZoomOut = () => setZoom((prev) => Math.max(prev - 25, 50));
+
+  // Page navigation handlers
+  const handlePageInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    if (value === "") {
+      return; // Allow empty input while typing
+    }
+    const pageNum = parseInt(value, 10);
+    if (!isNaN(pageNum) && pageNum >= 1 && pageNum <= totalPages) {
+      setCurrentPage(pageNum);
+      scrollToPage(pageNum);
+    }
+  };
+
+  const handlePageInputBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    if (value === "" || isNaN(parseInt(value, 10))) {
+      // Reset to current page if invalid
+      e.target.value = currentPage.toString();
+    }
+  };
+
+  const handlePageInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.currentTarget.blur();
+    }
+  };
+
+  const handlePreviousPage = () => {
+    if (currentPage > 1) {
+      const newPage = currentPage - 1;
+      setCurrentPage(newPage);
+      scrollToPage(newPage);
+    }
+  };
+
+  const handleNextPage = () => {
+    if (currentPage < totalPages) {
+      const newPage = currentPage + 1;
+      setCurrentPage(newPage);
+      scrollToPage(newPage);
+    }
+  };
+
+  const scrollToPage = (pageNum: number) => {
+    const pageElement = document.getElementById(`page_${pageNum}`);
+    if (pageElement) {
+      pageElement.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
 
   // Load PDF
   useEffect(() => {
@@ -111,14 +161,83 @@ export function PDFViewerWrapper({
     renderPages();
   }, [pdfDoc, zoom, onPageDimensions]);
 
+  // Track current page based on scroll position
+  useEffect(() => {
+    if (!containerRef.current || totalPages === 0) return;
+
+    const container = containerRef.current;
+    
+    const handleScroll = () => {
+      const containerRect = container.getBoundingClientRect();
+      const containerCenter = containerRect.top + containerRect.height / 2;
+      
+      let closestPage = 1;
+      let closestDistance = Infinity;
+      
+      for (let i = 1; i <= totalPages; i++) {
+        const pageElement = document.getElementById(`page_${i}`);
+        if (pageElement) {
+          const pageRect = pageElement.getBoundingClientRect();
+          const pageCenter = pageRect.top + pageRect.height / 2;
+          const distance = Math.abs(containerCenter - pageCenter);
+          
+          if (distance < closestDistance) {
+            closestDistance = distance;
+            closestPage = i;
+          }
+        }
+      }
+      
+      if (closestPage !== currentPage) {
+        setCurrentPage(closestPage);
+      }
+    };
+
+    container.addEventListener('scroll', handleScroll);
+    // Also check on initial load
+    handleScroll();
+    
+    return () => {
+      container.removeEventListener('scroll', handleScroll);
+    };
+  }, [totalPages, currentPage]);
+
   return (
     <div className="h-full flex flex-col">
       {/* Toolbar */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
         <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">
-            Page {currentPage} of {totalPages}
-          </span>
+          <button
+            onClick={handlePreviousPage}
+            disabled={currentPage <= 1}
+            className="p-1 rounded-lg hover:bg-muted/50 transition-colors text-muted-foreground hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Previous page"
+          >
+            <ChevronUp className="w-4 h-4" />
+          </button>
+          <div className="flex items-center gap-1">
+            <input
+              type="number"
+              min="1"
+              max={totalPages}
+              value={currentPage}
+              onChange={handlePageInputChange}
+              onBlur={handlePageInputBlur}
+              onKeyDown={handlePageInputKeyDown}
+              className="w-12 px-2 py-1 text-sm text-center border border-border rounded bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
+            />
+            <span className="text-sm text-muted-foreground">
+              of {totalPages}
+            </span>
+          </div>
+          <button
+            onClick={handleNextPage}
+            disabled={currentPage >= totalPages}
+            className="p-1 rounded-lg hover:bg-muted/50 transition-colors text-muted-foreground hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Next page"
+          >
+            <ChevronDown className="w-4 h-4" />
+          </button>
         </div>
 
         <div className="flex items-center gap-1">

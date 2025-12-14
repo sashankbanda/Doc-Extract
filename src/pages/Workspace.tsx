@@ -1,27 +1,36 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { FileText, Table, Tag, Sparkles, Loader2, RotateCcw } from "lucide-react";
+import { FileText, Table, Sparkles, Loader2, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { TwoPaneLayout } from "@/components/workspace/TwoPaneLayout";
 import { FileSelectorDropdown } from "@/components/workspace/FileSelectorDropdown";
 import { PDFViewerWrapper } from "@/components/workspace/PDFViewerWrapper";
 import { ExtractedTextPanel } from "@/components/workspace/ExtractedTextPanel";
 import { StructuredTablePanel } from "@/components/workspace/StructuredTablePanel";
-import { TemplateFieldsPanel } from "@/components/workspace/TemplateFieldsPanel";
-import { BoundingBox, LayoutText, ExtractedTable, ExtractedField } from "@/types/document";
+import { BoundingBox, LayoutText, ExtractedTable } from "@/types/document";
 import { apiRetrieve, apiHighlight, API_BASE, structureDocument, getStructuredDocument, StructuredDataResponse } from "@/lib/api";
 import DocumentViewer, { guessFileType } from "@/components/DocumentViewer";
 import StructuredDataViewer from "@/components/StructuredDataViewer";
 import { useDocumentContext } from "@/context/DocumentContext";
 
-type TabType = "text" | "tables" | "fields";
+type TabType = "text" | "tables";
 
 const tabs: { id: TabType; label: string; icon: typeof FileText }[] = [
   { id: "text", label: "Raw Text", icon: FileText },
   { id: "tables", label: "Structured Data", icon: Table },
-  { id: "fields", label: "Fields", icon: Tag },
 ];
 
 export default function Workspace() {
@@ -412,9 +421,8 @@ export default function Workspace() {
     }
   }, [whisperHash, dataCache, cacheData]);
 
-  // Mock data for tables and fields (can be enhanced later)
+  // Mock data for tables (can be enhanced later)
   const mockTables: ExtractedTable[] = [];
-  const mockFields: ExtractedField[] = [];
 
   // Highlight a specific line id (0-based) using existing highlight API
   // Returns the bounding box if successful, throws error if failed
@@ -614,14 +622,6 @@ export default function Workspace() {
             )}
           </div>
         );
-      case "fields":
-        return (
-          <TemplateFieldsPanel
-            fields={mockFields}
-            onFieldHover={handleItemHover}
-            onFieldClick={handleItemClick}
-          />
-        );
     }
   };
 
@@ -714,19 +714,39 @@ export default function Workspace() {
                     }
                   }}
                 />
-                <Button
-                  onClick={() => {
-                    clearDocuments();
-                    navigate("/upload");
-                  }}
-                  variant="ghost"
-                  size="sm"
-                  className="gap-2 text-muted-foreground hover:text-destructive shrink-0"
-                  title="Clear all files and reset session"
-                >
-                  <RotateCcw className="w-4 h-4" />
-                  <span className="hidden sm:inline">Reset Session</span>
-                </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="gap-2 text-muted-foreground hover:text-destructive shrink-0"
+                      title="Clear all files and reset session"
+                    >
+                      <RotateCcw className="w-4 h-4" />
+                      <span className="hidden sm:inline">Reset Session</span>
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Reset Session</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Are you sure you want to reset the session? This will clear all uploaded files and their extracted data. This action cannot be undone.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => {
+                          clearDocuments();
+                          navigate("/upload");
+                        }}
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      >
+                        Reset Session
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </div>
               <Button
                 onClick={handleStructureDocument}
