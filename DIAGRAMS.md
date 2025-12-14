@@ -202,24 +202,24 @@ sequenceDiagram
     UploadPage->>DocumentContext: Update status (processing)
     
     loop Polling
-        UploadPage->>Backend: GET /status?whisper_hash={hash}
+        UploadPage->>Backend: GET /status?whisper_hash=hash
         Backend->>FileStore: Load status
         Backend->>LLMWhisperer: Check processing status
         LLMWhisperer-->>Backend: Status: processing/processed
         Backend-->>UploadPage: Return status
     end
     
-    When processed:
+    Note over Backend,FileStore: When processed, save OCR results
     Backend->>FileStore: Save OCR results (_raw_text.txt, .json)
     
-    User->>WorkspacePage: Navigate to /workspace?whisper_hash={hash}
-    WorkspacePage->>Backend: GET /retrieve?whisper_hash={hash}
+    User->>WorkspacePage: Navigate to /workspace?whisper_hash=hash
+    WorkspacePage->>Backend: GET /retrieve?whisper_hash=hash
     Backend->>FileStore: Load OCR results
     Backend-->>WorkspacePage: Return result_text + line_metadata
     WorkspacePage->>DocumentContext: Cache data
     
     User->>WorkspacePage: Click "Analyze with AI"
-    WorkspacePage->>Backend: POST /structure/{whisper_hash}
+    WorkspacePage->>Backend: POST /structure/whisper_hash
     Backend->>FileStore: Load raw text + line_metadata
     Backend->>LLMService: Extract structured data
     LLMService->>LLMService: Call Groq LLM
@@ -264,12 +264,12 @@ sequenceDiagram
     WorkspacePage->>WorkspacePage: handleStructuredHighlight()
     
     loop For each line_number
-        WorkspacePage->>Backend: GET /highlight?line=17&target_width={w}&target_height={h}
+        WorkspacePage->>Backend: GET /highlight?line=17&target_width=w&target_height=h
         Backend->>FileStore: Load line_metadata[17]
-        Note over Backend: Extract: [page, base_y, height, page_height]
+        Note over Backend: Extract: page, base_y, height, page_height
         Backend->>Backend: Calculate coordinates
         Note over Backend: Convert to viewport coordinates
-        Backend-->>WorkspacePage: Return {page, x1, y1, x2, y2}
+        Backend-->>WorkspacePage: Return page, x1, y1, x2, y2
     end
     
     WorkspacePage->>WorkspacePage: setActiveBoundingBox(first)
@@ -305,9 +305,9 @@ graph TB
         Upload[POST /upload<br/>upload.py]
         Status[GET /status<br/>status.py]
         Retrieve[GET /retrieve<br/>retrieve.py]
-        Document[GET /document/{hash}<br/>document.py]
-        StructureGet[GET /structure/{hash}<br/>structure.py]
-        StructurePost[POST /structure/{hash}<br/>structure.py]
+        Document[GET /document/hash<br/>document.py]
+        StructureGet[GET /structure/hash<br/>structure.py]
+        StructurePost[POST /structure/hash<br/>structure.py]
         Highlight[GET /highlight<br/>highlight.py]
         Health[GET /health<br/>main.py]
     end
@@ -349,7 +349,7 @@ How state flows through the application using React Context.
 ```mermaid
 graph TD
     subgraph "DocumentContext"
-        Documents[documents: Document[]]
+        Documents[documents: Document Array]
         ActiveDoc[activeDocumentId]
         DataCache[dataCache: Record]
         AddDoc[addDocument]
@@ -580,7 +580,7 @@ flowchart LR
     OCR --> LineMeta[Line Metadata<br/>line_metadata array]
     
     RawText --> Store1[Store in output_files/<br/>_raw_text.txt]
-    LineMeta --> Store2[Store in output_files/<br/>{hash}.json]
+    LineMeta --> Store2[Store in output_files/<br/>hash.json]
     
     Store1 --> Retrieve[Retrieve Endpoint]
     Store2 --> Retrieve
@@ -596,7 +596,7 @@ flowchart LR
     
     LLMExtract --> FlatItems[Flat Items Array<br/>key, value, line_numbers, semantic_type]
     
-    FlatItems --> Store3[Store in output_files/<br/>{hash}_structured.json]
+    FlatItems --> Store3[Store in output_files/<br/>hash_structured.json]
     Store3 --> Frontend3[Frontend: organizeStructuredData]
     
     Frontend3 --> Organized[Organized Sections<br/>Claims, Policy Info, Summary, Other]
