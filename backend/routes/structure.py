@@ -35,11 +35,11 @@ async def structure_document(whisper_hash: str):
             status_code=500, detail=f"Failed to structure document: {exc}"
         ) from exc
 
-    # Organized structure: sections with field-level line numbers + skipped items
+    # Flat, lossless structure: all items with semantic_type tags
+    # No grouping, no claims, no sections, no skipped_items - everything is preserved
     output_payload = {
         "whisper_hash": whisper_hash,
-        "sections": structured.get("sections", {}),  # Organized sections (Claims, Policy Info, etc.)
-        "skipped_items": structured.get("skipped_items", []),  # Items that couldn't be placed
+        "items": structured.get("items", []),  # Flat array of all extracted items
         "metadata": stored.get("metadata"),
     }
 

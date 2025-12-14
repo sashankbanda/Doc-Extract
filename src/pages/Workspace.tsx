@@ -21,7 +21,8 @@ import { PDFViewerWrapper } from "@/components/workspace/PDFViewerWrapper";
 import { ExtractedTextPanel } from "@/components/workspace/ExtractedTextPanel";
 import { StructuredTablePanel } from "@/components/workspace/StructuredTablePanel";
 import { BoundingBox, LayoutText, ExtractedTable } from "@/types/document";
-import { apiRetrieve, apiHighlight, API_BASE, structureDocument, getStructuredDocument, StructuredDataResponse } from "@/lib/api";
+import { apiRetrieve, apiHighlight, API_BASE, structureDocument, getStructuredDocument, StructuredDataResponse, OrganizedStructuredData } from "@/lib/api";
+import { organizeStructuredData } from "@/lib/organizeStructuredData";
 import DocumentViewer, { guessFileType } from "@/components/DocumentViewer";
 import StructuredDataViewer from "@/components/StructuredDataViewer";
 import { useDocumentContext } from "@/context/DocumentContext";
@@ -69,7 +70,7 @@ export default function Workspace() {
   const [activeBoundingBox, setActiveBoundingBox] = useState<BoundingBox | null>(null);
   const [secondaryHighlights, setSecondaryHighlights] = useState<BoundingBox[]>([]);
   const [pageDimensions, setPageDimensions] = useState<Record<number, { width: number, height: number }>>({});
-  const [structuredData, setStructuredData] = useState<StructuredDataResponse | null>(null);
+  const [structuredData, setStructuredData] = useState<OrganizedStructuredData | null>(null);
   const [structureLoading, setStructureLoading] = useState<boolean>(false);
   const [structureError, setStructureError] = useState<string | null>(null);
 
@@ -173,14 +174,16 @@ export default function Workspace() {
         } else {
           // Cache miss for structured data - try to load from backend
           try {
-            const structuredData = await getStructuredDocument(whisperHash);
-            if (structuredData && structuredData.sections) {
-              console.log("[Workspace] Found existing structured data in backend, loading automatically");
-              setStructuredData(structuredData);
-              // Update cache
+            const flatData = await getStructuredDocument(whisperHash);
+            if (flatData && flatData.items && flatData.items.length > 0) {
+              console.log("[Workspace] Found existing structured data in backend, organizing for display");
+              // Organize flat items into UI sections
+              const organized = organizeStructuredData(flatData.items);
+              setStructuredData(organized);
+              // Update cache with organized data
               cacheData(whisperHash, {
                 ...cachedData,
-                structured: structuredData,
+                structured: organized,
               });
             } else {
               setStructuredData(null);
@@ -221,16 +224,18 @@ export default function Workspace() {
         if (!cachedData?.structured) {
           try {
             // Check if structured data exists by trying to fetch it (GET request, doesn't re-run extraction)
-            const structuredData = await getStructuredDocument(whisperHash);
-            if (structuredData && structuredData.sections) {
-              console.log("[Workspace] Found existing structured data, loading automatically");
-              setStructuredData(structuredData);
+            const flatData = await getStructuredDocument(whisperHash);
+            if (flatData && flatData.items && flatData.items.length > 0) {
+              console.log("[Workspace] Found existing structured data, organizing for display");
+              // Organize flat items into UI sections
+              const organized = organizeStructuredData(flatData.items);
+              setStructuredData(organized);
               // Save to cache for future use
               cacheData(whisperHash, {
                 ...cachedData,
                 result_text: data.result_text || "",
                 line_metadata: data.line_metadata || [],
-                structured: structuredData,
+                structured: organized,
               });
             } else {
               setStructuredData(null);
@@ -448,15 +453,18 @@ export default function Workspace() {
     setStructureLoading(true);
     setStructureError(null);
     try {
-      const data = await structureDocument(whisperHash);
+      const flatData = await structureDocument(whisperHash);
+      
+      // Organize flat items into UI sections
+      const organized = organizeStructuredData(flatData.items || []);
       
       // Save to cache (merge with existing cached data)
       cacheData(whisperHash, {
         ...cachedData,
-        structured: data,
+        structured: organized,
       });
       
-      setStructuredData(data);
+      setStructuredData(organized);
     } catch (err: any) {
       console.error("[Workspace] Structure error:", err);
       setStructureError(err.message || "Failed to structure document");
@@ -660,7 +668,7 @@ export default function Workspace() {
             {structuredData && structuredData.sections && (
               <StructuredDataViewer
                 sections={structuredData.sections}
-                skipped_items={structuredData.skipped_items}
+                skipped_items={[]} // No skipped items in new format - everything is preserved
                 onHighlight={handleStructuredHighlight}
               />
             )}

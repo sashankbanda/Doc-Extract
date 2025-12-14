@@ -1,8 +1,10 @@
 """
-Deterministic organizer for flat items[] array.
+DEPRECATED: This service is no longer used.
 
-Converts flat extraction items into readable UI sections while preserving
-exact line numbers. No AI, no guessing, no line number modification.
+The system now uses a flat, lossless structure with semantic tagging.
+All grouping and organization is done in the frontend heuristically.
+
+This file is kept for reference but should not be imported or used.
 """
 
 import logging

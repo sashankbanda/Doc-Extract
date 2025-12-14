@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional, Union
 import litellm
 
 from backend.config import config
-from backend.services.structured_organizer import structured_organizer
+from backend.services.semantic_tagger import semantic_tagger
 
 
 logger = logging.getLogger(__name__)
@@ -138,13 +138,15 @@ class LLMService:
         
         for item in raw_items:
             key = item.get("key", "").strip()
-            value = item.get("value", "").strip()
+            value = item.get("value", "")
+            if value is not None:
+                value = str(value).strip()
+            else:
+                value = ""
             line_numbers_raw = item.get("line_numbers", [])
             
-            # Skip items with empty key or value
-            if not key or not value:
-                invalid_items.append({"item": item, "reason": "empty key or value"})
-                continue
+            # PRESERVE ALL ITEMS - even with empty keys/values (data loss prevention)
+            # Use empty string for missing keys/values instead of skipping
             
             # Convert line numbers to integers (handles hex, strings, etc.)
             line_numbers = []
@@ -153,25 +155,26 @@ class LLMService:
                 if converted is not None:
                     line_numbers.append(converted)
             
-            # Skip items with no valid line numbers (per requirements: fail silently)
-            if not line_numbers:
-                invalid_items.append({"item": item, "reason": "no valid line_numbers"})
-                continue
+            # If no valid line numbers, use empty array (preserve item, just no line refs)
+            # This ensures no data loss - item is still included
             
-            # Add validated item
+            # Add item (preserved even if key/value/line_numbers are empty)
             items.append({
-                "key": key,
-                "value": value,
-                "line_numbers": sorted(list(set(line_numbers)))  # Deduplicate and sort
+                "key": key if key else "(no key)",
+                "value": value if value else "(no value)",
+                "line_numbers": sorted(list(set(line_numbers))) if line_numbers else []  # Deduplicate and sort
             })
         
-        if invalid_items:
-            logger.info(f"[LLMService] Skipped {len(invalid_items)} items with invalid line_numbers or empty values")
+        # No items are skipped - all items are preserved (data loss prevention)
+        logger.info(f"[LLMService] Extracted {len(items)} items (all preserved, no data loss)")
         
-        # Organize items into readable sections (deterministic, no AI)
-        organized = structured_organizer.organize(items)
+        # Add semantic_type tags to all items (deterministic, dictionary-based)
+        tagged_items = semantic_tagger.tag_items(items)
         
-        return organized
+        # Return flat, lossless structure - no grouping, no claims, no sections
+        return {
+            "items": tagged_items
+        }
 
     def _convert_line_number(self, line_val: Any) -> Optional[int]:
         """
