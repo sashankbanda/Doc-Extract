@@ -83,11 +83,13 @@ function HighlightValue({
   const handleClick = () => {
     if (!clickable || !lineIds) {
       console.warn(`[StructuredDataViewer] Cannot highlight path "${path}" - no line IDs found`);
+      console.warn(`[DEBUG] Path: "${path}", sourceRefs available:`, sourceRefs ? Object.keys(sourceRefs).slice(0, 10) : 'none');
       return;
     }
     
     // Pass line IDs to onHighlight - this will highlight the entire lines
     console.log(`[StructuredDataViewer] Highlighting path "${path}" with line IDs:`, lineIds);
+    console.log(`[DEBUG] Field value: "${children}", Line IDs:`, lineIds);
     onHighlight(lineIds);
   };
 
@@ -127,7 +129,8 @@ function formatValue(value: any): string {
   }
   if (typeof value === "object") {
     if (Array.isArray(value)) {
-      return value.length > 0 ? value.join(", ") : "—";
+      // Display array values on separate lines for better readability
+      return value.length > 0 ? value.join("\n") : "—";
     }
     // For nested objects, show a summary or stringify
     return JSON.stringify(value);
@@ -175,12 +178,29 @@ const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({ data, sourc
             {reportInfoKeys.map((key) => {
               const value = reportInfo[key];
               const path = `report_info.${key}`;
+              const isArray = Array.isArray(value);
               return (
                 <div key={key} className="flex flex-col">
                   <span className="text-muted-foreground">{formatKey(key)}</span>
-                  <HighlightValue path={path} sourceRefs={sourceRefs} onHighlight={onHighlight}>
-                    {formatValue(value)}
-                  </HighlightValue>
+                  {isArray ? (
+                    // Display array values on separate lines for better readability
+                    <div className="flex flex-col gap-1">
+                      {value.map((item: any, idx: number) => (
+                        <HighlightValue 
+                          key={idx} 
+                          path={`${path}[${idx}]`} 
+                          sourceRefs={sourceRefs} 
+                          onHighlight={onHighlight}
+                        >
+                          {formatValue(item)}
+                        </HighlightValue>
+                      ))}
+                    </div>
+                  ) : (
+                    <HighlightValue path={path} sourceRefs={sourceRefs} onHighlight={onHighlight}>
+                      {formatValue(value)}
+                    </HighlightValue>
+                  )}
                 </div>
               );
             })}

@@ -30,5 +30,9 @@ class Config:
     BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     INPUT_DIR = os.path.join(BASE_DIR, "input_files")
     OUTPUT_DIR = os.path.join(BASE_DIR, "output_files")
+    
+    # Extraction strictness mode (off by default)
+    # When enabled: drops low-confidence fields, ambiguous collisions, fields outside windows
+    STRICT_EXTRACTION = os.getenv("STRICT_EXTRACTION", "false").lower() == "true"
 
 config = Config()

@@ -382,25 +382,50 @@ export default function Workspace() {
   // Returns the bounding box if successful, throws error if failed
   const highlightLineById = useCallback(
     async (lineIndex: number): Promise<BoundingBox> => {
+      console.log(`[DEBUG] highlightLineById called for lineIndex: ${lineIndex}`);
+      
       if (lineIndex == null || lineIndex < 0) {
         throw new Error(`Invalid line index: ${lineIndex}`);
       }
+      
       const meta = lineMetadata?.[lineIndex];
+      console.log(`[DEBUG] Line ${lineIndex} metadata:`, meta);
+      
       if (!meta || !Array.isArray(meta) || meta.length < 4) {
         throw new Error(`No line metadata for index ${lineIndex}`);
       }
+      
       const pageZeroBased = meta[0] || 0;
+      const base_y = meta[1];
+      const height = meta[2];
+      const page_height = meta[3];
       const displayPage = pageZeroBased + 1; // viewer uses 1-based
+      
+      console.log(`[DEBUG] Line ${lineIndex} details:`, {
+        pageZeroBased,
+        displayPage,
+        base_y,
+        height,
+        page_height,
+        rawTextLine: resultText?.split('\n')[lineIndex]?.substring(0, 50) // First 50 chars
+      });
+      
       const dims = pageDimensions[displayPage];
       if (!dims) {
         throw new Error(`Missing page dimensions for page ${displayPage}`);
       }
+      
+      console.log(`[DEBUG] Calling API highlight for line ${lineIndex} with dimensions:`, dims);
+      
       const rect = await apiHighlight(
         whisperHash!,
         lineIndex,
         Math.round(dims.width),
         Math.round(dims.height)
       );
+      
+      console.log(`[DEBUG] API returned coordinates for line ${lineIndex}:`, rect);
+      
       const pdfPage = rect.page + 1;
       const boundingBox: BoundingBox = {
         x: rect.x1,
@@ -409,9 +434,12 @@ export default function Workspace() {
         height: rect.y2 - rect.y1,
         page: pdfPage
       };
+      
+      console.log(`[DEBUG] Final boundingBox for line ${lineIndex}:`, boundingBox);
+      
       return boundingBox;
     },
-    [lineMetadata, pageDimensions, whisperHash]
+    [lineMetadata, pageDimensions, whisperHash, resultText]
   );
 
   const handleStructuredHighlight = useCallback(
@@ -426,6 +454,11 @@ export default function Workspace() {
       }
 
       console.log(`[Workspace] Highlighting ${validIds.length} line(s):`, validIds);
+      console.log(`[DEBUG] Source Refs for these lines:`, validIds.map(id => ({
+        lineId: id,
+        metadata: lineMetadata?.[id],
+        rawText: resultText?.split('\n')[id]?.substring(0, 100)
+      })));
 
       // Clear previous highlights
       setActiveBoundingBox(null);

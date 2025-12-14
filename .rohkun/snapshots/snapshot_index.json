@@ -1,0 +1,59 @@
+{
+  "project_hash": "RHKN-6F2C57",
+  "snapshots": [
+    {
+      "id": "snapshot_20251214_044455",
+      "timestamp": "2025-12-14T04:44:55.691608Z",
+      "sequence": 1,
+      "endpoints": 8,
+      "api_calls": 7,
+      "connections": 10,
+      "files": 126,
+      "drift": 0.0,
+      "status": "baseline",
+      "report_file": "2"
+    },
+    {
+      "id": "snapshot_20251214_044634",
+      "timestamp": "2025-12-14T04:46:34.303295Z",
+      "sequence": 2,
+      "endpoints": 8,
+      "api_calls": 7,
+      "connections": 10,
+      "files": 132,
+      "drift": 0.0,
+      "status": "healthy",
+      "report_file": "3",
+      "compared_to": "snapshot_20251214_044455",
+      "compared_to_report": "2"
+    },
+    {
+      "id": "snapshot_20251214_044657",
+      "timestamp": "2025-12-14T04:46:57.604894Z",
+      "sequence": 3,
+      "endpoints": 8,
+      "api_calls": 7,
+      "connections": 10,
+      "files": 135,
+      "drift": 0.0,
+      "status": "healthy",
+      "report_file": "4",
+      "compared_to": "snapshot_20251214_044634",
+      "compared_to_report": "3"
+    },
+    {
+      "id": "snapshot_20251214_044859",
+      "timestamp": "2025-12-14T04:48:59.356917Z",
+      "sequence": 4,
+      "endpoints": 8,
+      "api_calls": 7,
+      "connections": 10,
+      "files": 138,
+      "drift": 0.0,
+      "status": "healthy",
+      "report_file": "5",
+      "compared_to": "snapshot_20251214_044657",
+      "compared_to_report": "4"
+    }
+  ]
+}
