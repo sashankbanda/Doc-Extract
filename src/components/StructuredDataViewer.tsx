@@ -1,15 +1,21 @@
-import React from "react";
+import React, { useState } from "react";
 import { cn } from "@/lib/utils";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 
 type HighlightHandler = (lineIds: number[], isFirstLine: boolean) => void;
 
 export interface StructuredDataViewerProps {
   sections: {
-    Claims?: Array<Record<string, { value: string; line_numbers: number[] }>>;
-    "Policy Info"?: Record<string, { value: string; line_numbers: number[] }>;
-    Summary?: Record<string, { value: string; line_numbers: number[] }>;
-    "Report Info"?: Record<string, { value: string; line_numbers: number[] }>;
-    Other?: Record<string, { value: string; line_numbers: number[] }>;
+    Claims?: Array<Record<string, Array<{ value: string; line_numbers: number[] }>>>;
+    "Policy Info"?: Record<string, Array<{ value: string; line_numbers: number[] }>>;
+    Summary?: Record<string, Array<{ value: string; line_numbers: number[] }>>;
+    "Report Info"?: Record<string, Array<{ value: string; line_numbers: number[] }>>;
+    Other?: Record<string, Array<{ value: string; line_numbers: number[] }>>;
   };
   skipped_items?: Array<{
     key: string;
@@ -79,7 +85,11 @@ function HighlightValue({
   );
 }
 
-const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({ sections, skipped_items = [], onHighlight }) => {
+const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({
+  sections,
+  skipped_items = [],
+  onHighlight,
+}) => {
   if (!sections || Object.keys(sections).length === 0) {
     return (
       <div className={sectionCard}>
@@ -90,16 +100,11 @@ const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({ sections, s
     );
   }
 
-  // Render Claims section as a table
-  const renderClaimsSection = (claims: Array<Record<string, { value: string; line_numbers: number[] }>>) => {
+  // Render Claims section with accordion per claim
+  const renderClaimsSection = (
+    claims: Array<Record<string, Array<{ value: string; line_numbers: number[] }>>>
+  ) => {
     if (!claims || claims.length === 0) return null;
-
-    // Get all unique field keys from all claims
-    const allKeys = new Set<string>();
-    claims.forEach((claim) => {
-      Object.keys(claim).forEach((key) => allKeys.add(key));
-    });
-    const columnKeys = Array.from(allKeys).sort();
 
     return (
       <div className={sectionCard}>
@@ -109,64 +114,76 @@ const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({ sections, s
             {claims.length} {claims.length === 1 ? "claim" : "claims"}
           </span>
         </div>
-        <div className="overflow-auto">
-          <table className="w-full text-sm border-collapse">
-            <thead>
-              <tr className="bg-muted/50 text-xs text-muted-foreground">
-                {columnKeys.map((colKey) => (
-                  <th
-                    key={colKey}
-                    className={cn(
-                      "text-left px-3 py-2 font-medium",
-                      claims[0]?.[colKey] && isNumericValue(claims[0][colKey].value) && "text-right"
-                    )}
-                  >
-                    {formatKey(colKey)}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {claims.map((claim, idx) => (
-                <tr key={idx} className="border-t border-border/50">
-                  {columnKeys.map((colKey) => {
-                    const field = claim[colKey];
-                    const isNumeric = field && isNumericValue(field.value);
-                    return (
-                      <td
-                        key={colKey}
-                        className={cn(
-                          "px-3 py-2",
-                          isNumeric && "text-right",
-                          colKey.toLowerCase().includes("description") && "max-w-[220px]"
-                        )}
-                      >
-                        {field ? (
-                          <HighlightValue
-                            lineNumbers={field.line_numbers}
-                            onHighlight={onHighlight}
-                          >
-                            {field.value}
-                          </HighlightValue>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+
+        <Accordion type="multiple" defaultValue={claims.map((_, idx) => `claim-${idx}`)} className="w-full">
+          {claims.map((claim, claimIdx) => {
+            // Get Claim Number for display
+            const claimNumberValues = claim["Claim Number"] || claim["Claim #"] || [];
+            const claimNumber = claimNumberValues.length > 0 
+              ? claimNumberValues[0].value 
+              : `Claim ${claimIdx + 1}`;
+
+            const claimKeys = Object.keys(claim).filter(
+              (key) => key !== "Claim Number" && key !== "Claim #"
+            );
+            const allKeys = ["Claim Number", ...claimKeys].filter(
+              (key) => claim[key] && claim[key].length > 0
+            );
+
+            return (
+              <AccordionItem key={claimIdx} value={`claim-${claimIdx}`} className="border-b border-border/50">
+                <AccordionTrigger className="text-sm font-medium hover:no-underline">
+                  <div className="flex items-center gap-2">
+                    <span>Claim {claimNumber}</span>
+                    <span className="text-xs text-muted-foreground font-normal">
+                      ({allKeys.length - 1} fields)
+                    </span>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent>
+                  <div className="space-y-4 pt-2">
+                    {allKeys.map((key) => {
+                      const valueList = claim[key] || [];
+                      if (valueList.length === 0) return null;
+
+                      return (
+                        <div key={key} className="space-y-1">
+                          <div className="text-xs font-medium text-muted-foreground">
+                            {formatKey(key)}:
+                          </div>
+                          <div className="space-y-1 pl-2">
+                            {valueList.map((item, valueIdx) => (
+                              <div
+                                key={valueIdx}
+                                className="text-sm flex items-start gap-2"
+                              >
+                                <span className="text-muted-foreground">•</span>
+                                <HighlightValue
+                                  lineNumbers={item.line_numbers}
+                                  onHighlight={onHighlight}
+                                >
+                                  {item.value}
+                                </HighlightValue>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            );
+          })}
+        </Accordion>
       </div>
     );
   };
 
-  // Render flat section (Policy Info, Summary, Report Info, Other) as a grid
+  // Render flat section (Policy Info, Summary, Report Info, Other) with accordion
   const renderFlatSection = (
     title: string,
-    fields: Record<string, { value: string; line_numbers: number[] }>
+    fields: Record<string, Array<{ value: string; line_numbers: number[] }>>
   ) => {
     if (!fields || Object.keys(fields).length === 0) return null;
 
@@ -174,81 +191,108 @@ const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({ sections, s
 
     return (
       <div className={sectionCard}>
-        <h3 className="text-sm font-semibold mb-3">{title}</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-          {fieldKeys.map((key) => {
-            const field = fields[key];
-            const isNumeric = field && isNumericValue(field.value);
-            return (
-              <div key={key} className="flex flex-col">
-                <span className="text-muted-foreground">{formatKey(key)}</span>
-                {field ? (
-                  <HighlightValue
-                    lineNumbers={field.line_numbers}
-                    onHighlight={onHighlight}
-                  >
-                    {field.value}
-                  </HighlightValue>
-                ) : (
-                  <span className="text-muted-foreground">—</span>
-                )}
+        <Accordion type="single" collapsible className="w-full">
+          <AccordionItem value={title.toLowerCase().replace(/\s+/g, "-")} className="border-none">
+            <AccordionTrigger className="text-sm font-semibold hover:no-underline py-2">
+              <div className="flex items-center justify-between w-full pr-4">
+                <span>{title}</span>
+                <span className="text-xs text-muted-foreground font-normal">
+                  {fieldKeys.length} {fieldKeys.length === 1 ? "field" : "fields"}
+                </span>
               </div>
-            );
-          })}
-        </div>
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm pt-2">
+                {fieldKeys.map((key) => {
+                  const valueList = fields[key] || [];
+                  if (valueList.length === 0) return null;
+
+                  return (
+                    <div key={key} className="flex flex-col space-y-1">
+                      <span className="text-muted-foreground text-xs font-medium">
+                        {formatKey(key)}
+                      </span>
+                      <div className="space-y-1">
+                        {valueList.map((item, valueIdx) => (
+                          <div key={valueIdx} className="flex items-start gap-2">
+                            <span className="text-muted-foreground text-xs">•</span>
+                            <HighlightValue
+                              lineNumbers={item.line_numbers}
+                              onHighlight={onHighlight}
+                            >
+                              {item.value}
+                            </HighlightValue>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
       </div>
     );
   };
 
   return (
-    <div className="space-y-6">
-      {/* Claims Section - Table */}
+    <div className="space-y-4">
+      {/* Claims Section - Accordion per claim, default open */}
       {sections.Claims && renderClaimsSection(sections.Claims)}
 
-      {/* Report Info Section */}
-      {sections["Report Info"] && renderFlatSection("Report Info", sections["Report Info"])}
+      {/* Report Info Section - Collapsed by default */}
+      {sections["Report Info"] &&
+        renderFlatSection("Report Info", sections["Report Info"])}
 
-      {/* Policy Info Section */}
-      {sections["Policy Info"] && renderFlatSection("Policy Info", sections["Policy Info"])}
+      {/* Policy Info Section - Collapsed by default */}
+      {sections["Policy Info"] &&
+        renderFlatSection("Policy Info", sections["Policy Info"])}
 
-      {/* Summary Section */}
+      {/* Summary Section - Collapsed by default */}
       {sections.Summary && renderFlatSection("Summary", sections.Summary)}
 
-      {/* Other Section */}
-      {sections.Other && renderFlatSection("Other", sections.Other)}
+      {/* Other Section - Collapsed by default, REQUIRED */}
+      {sections.Other && renderFlatSection("Other / Unclassified", sections.Other)}
 
-      {/* Skipped Items Section - Collapsible */}
+      {/* Skipped Items Section - Only if items exist (should be empty in new format) */}
       {skipped_items && skipped_items.length > 0 && (
-        <details className={sectionCard}>
-          <summary className="text-sm font-semibold cursor-pointer list-none">
-            <div className="flex items-center justify-between">
-              <span>Skipped / Unplaced Fields</span>
-              <span className="text-xs text-muted-foreground font-normal">
-                {skipped_items.length} {skipped_items.length === 1 ? "item" : "items"}
-              </span>
-            </div>
-          </summary>
-          <div className="mt-3 space-y-2">
-            {skipped_items.map((item, idx) => (
-              <div key={idx} className="text-sm border-l-2 border-muted pl-3 py-1">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium">{item.key || "(no key)"}</div>
-                    <HighlightValue
-                      lineNumbers={item.line_numbers}
-                      onHighlight={onHighlight}
-                    >
-                      {item.value}
-                    </HighlightValue>
-                  </div>
-                  <span className="text-xs text-muted-foreground whitespace-nowrap">
-                    {item.reason}
+        <div className={sectionCard}>
+          <Accordion type="single" collapsible className="w-full">
+            <AccordionItem value="skipped" className="border-none">
+              <AccordionTrigger className="text-sm font-semibold hover:no-underline py-2">
+                <div className="flex items-center justify-between w-full pr-4">
+                  <span>Skipped / Unplaced Fields</span>
+                  <span className="text-xs text-muted-foreground font-normal">
+                    {skipped_items.length} {skipped_items.length === 1 ? "item" : "items"}
                   </span>
                 </div>
-              </div>
-            ))}
-          </div>
-        </details>
+              </AccordionTrigger>
+              <AccordionContent>
+                <div className="space-y-2 pt-2">
+                  {skipped_items.map((item, idx) => (
+                    <div key={idx} className="text-sm border-l-2 border-muted pl-3 py-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium">{item.key || "(no key)"}</div>
+                          <HighlightValue
+                            lineNumbers={item.line_numbers}
+                            onHighlight={onHighlight}
+                          >
+                            {item.value}
+                          </HighlightValue>
+                        </div>
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">
+                          {item.reason}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        </div>
       )}
     </div>
   );
