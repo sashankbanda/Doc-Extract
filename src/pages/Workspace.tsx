@@ -11,7 +11,7 @@ import { ExtractedTextPanel } from "@/components/workspace/ExtractedTextPanel";
 import { StructuredTablePanel } from "@/components/workspace/StructuredTablePanel";
 import { TemplateFieldsPanel } from "@/components/workspace/TemplateFieldsPanel";
 import { BoundingBox, LayoutText, ExtractedTable, ExtractedField } from "@/types/document";
-import { apiRetrieve, apiHighlight, API_BASE, structureDocument, StructuredDataResponse } from "@/lib/api";
+import { apiRetrieve, apiHighlight, API_BASE, structureDocument, getStructuredDocument, StructuredDataResponse } from "@/lib/api";
 import DocumentViewer, { guessFileType } from "@/components/DocumentViewer";
 import StructuredDataViewer from "@/components/StructuredDataViewer";
 import { useDocumentContext } from "@/context/DocumentContext";
@@ -134,13 +134,30 @@ export default function Workspace() {
         setResultText(cachedData.result_text || "");
         setLineMetadata(cachedData.line_metadata || []);
         
-        // Also load cached structured data if available, otherwise clear it
+        // Also load cached structured data if available
         if (cachedData.structured) {
           console.log("[Workspace] Loading cached structured data");
           setStructuredData(cachedData.structured);
         } else {
-          // Explicitly clear structured data if new file doesn't have it
-          setStructuredData(null);
+          // Cache miss for structured data - try to load from backend
+          try {
+            const structuredData = await getStructuredDocument(whisperHash);
+            if (structuredData && structuredData.sections) {
+              console.log("[Workspace] Found existing structured data in backend, loading automatically");
+              setStructuredData(structuredData);
+              // Update cache
+              cacheData(whisperHash, {
+                ...cachedData,
+                structured: structuredData,
+              });
+            } else {
+              setStructuredData(null);
+            }
+          } catch (err: any) {
+            // Structured data doesn't exist yet
+            console.log("[Workspace] No existing structured data found");
+            setStructuredData(null);
+          }
         }
         
         setLoading(false);
@@ -167,9 +184,30 @@ export default function Workspace() {
         setResultText(data.result_text || "");
         setLineMetadata(data.line_metadata || []);
         
-        // Clear structured data if not in cache (new file hasn't been analyzed yet)
+        // Try to load structured data from backend if it exists (even if not in cache)
+        // This ensures structured data persists across page reloads
         if (!cachedData?.structured) {
-          setStructuredData(null);
+          try {
+            // Check if structured data exists by trying to fetch it (GET request, doesn't re-run extraction)
+            const structuredData = await getStructuredDocument(whisperHash);
+            if (structuredData && structuredData.sections) {
+              console.log("[Workspace] Found existing structured data, loading automatically");
+              setStructuredData(structuredData);
+              // Save to cache for future use
+              cacheData(whisperHash, {
+                ...cachedData,
+                result_text: data.result_text || "",
+                line_metadata: data.line_metadata || [],
+                structured: structuredData,
+              });
+            } else {
+              setStructuredData(null);
+            }
+          } catch (err: any) {
+            // Structured data doesn't exist yet - this is fine, user can click "Analyze with AI"
+            console.log("[Workspace] No existing structured data found (this is normal for new files)");
+            setStructuredData(null);
+          }
         }
       } catch (err: any) {
         console.error("[Workspace] Error fetching data:", err);

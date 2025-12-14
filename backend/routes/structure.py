@@ -6,6 +6,15 @@ from backend.services.llm_service import llm_service
 router = APIRouter()
 
 
+@router.get("/structure/{whisper_hash}")
+async def get_structured_document(whisper_hash: str):
+    """Retrieve existing structured data without re-running extraction."""
+    structured_data = file_store.get_json_output(whisper_hash, suffix="_structured")
+    if structured_data:
+        return structured_data
+    raise HTTPException(status_code=404, detail="Structured data not found")
+
+
 @router.post("/structure/{whisper_hash}")
 async def structure_document(whisper_hash: str):
     stored = file_store.get_json_output(whisper_hash, suffix="")
