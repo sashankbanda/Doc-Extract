@@ -570,6 +570,7 @@ export default function Workspace() {
             {structuredData && structuredData.sections && (
               <StructuredDataViewer
                 sections={structuredData.sections}
+                skipped_items={structuredData.skipped_items}
                 onHighlight={handleStructuredHighlight}
               />
             )}

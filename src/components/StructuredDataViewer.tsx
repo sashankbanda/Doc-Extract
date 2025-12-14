@@ -11,6 +11,12 @@ export interface StructuredDataViewerProps {
     "Report Info"?: Record<string, { value: string; line_numbers: number[] }>;
     Other?: Record<string, { value: string; line_numbers: number[] }>;
   };
+  skipped_items?: Array<{
+    key: string;
+    value: string;
+    line_numbers: number[];
+    reason: string;
+  }>;
   onHighlight: HighlightHandler;
 }
 
@@ -73,7 +79,7 @@ function HighlightValue({
   );
 }
 
-const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({ sections, onHighlight }) => {
+const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({ sections, skipped_items = [], onHighlight }) => {
   if (!sections || Object.keys(sections).length === 0) {
     return (
       <div className={sectionCard}>
@@ -210,6 +216,40 @@ const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({ sections, o
 
       {/* Other Section */}
       {sections.Other && renderFlatSection("Other", sections.Other)}
+
+      {/* Skipped Items Section - Collapsible */}
+      {skipped_items && skipped_items.length > 0 && (
+        <details className={sectionCard}>
+          <summary className="text-sm font-semibold cursor-pointer list-none">
+            <div className="flex items-center justify-between">
+              <span>Skipped / Unplaced Fields</span>
+              <span className="text-xs text-muted-foreground font-normal">
+                {skipped_items.length} {skipped_items.length === 1 ? "item" : "items"}
+              </span>
+            </div>
+          </summary>
+          <div className="mt-3 space-y-2">
+            {skipped_items.map((item, idx) => (
+              <div key={idx} className="text-sm border-l-2 border-muted pl-3 py-1">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium">{item.key || "(no key)"}</div>
+                    <HighlightValue
+                      lineNumbers={item.line_numbers}
+                      onHighlight={onHighlight}
+                    >
+                      {item.value}
+                    </HighlightValue>
+                  </div>
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">
+                    {item.reason}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
     </div>
   );
 };
