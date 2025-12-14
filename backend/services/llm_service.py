@@ -9,6 +9,7 @@ from backend.config import config
 from backend.services.normalization_service import normalization_service
 from backend.services.grouping_service import grouping_service
 from backend.services.metadata_service import metadata_service, StandardizedMetadata
+from backend.services.structured_organizer import structured_organizer
 
 
 logger = logging.getLogger(__name__)
@@ -170,9 +171,10 @@ class LLMService:
         if invalid_items:
             logger.info(f"[LLMService] Skipped {len(invalid_items)} items with invalid line_numbers or empty values")
         
-        return {
-            "items": items
-        }
+        # Organize items into readable sections (deterministic, no AI)
+        organized = structured_organizer.organize(items)
+        
+        return organized
 
     def _convert_line_number(self, line_val: Any) -> Optional[int]:
         """

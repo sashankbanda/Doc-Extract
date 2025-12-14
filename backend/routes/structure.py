@@ -26,10 +26,10 @@ async def structure_document(whisper_hash: str):
             status_code=500, detail=f"Failed to structure document: {exc}"
         ) from exc
 
-    # Flat structure: items[] array with key, value, line_numbers
+    # Organized structure: sections with field-level line numbers
     output_payload = {
         "whisper_hash": whisper_hash,
-        "items": structured.get("items", []),  # Flat array of extracted items
+        "sections": structured.get("sections", {}),  # Organized sections (Claims, Policy Info, etc.)
         "metadata": stored.get("metadata"),
     }
 

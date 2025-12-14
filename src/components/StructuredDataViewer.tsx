@@ -4,11 +4,13 @@ import { cn } from "@/lib/utils";
 type HighlightHandler = (lineIds: number[], isFirstLine: boolean) => void;
 
 export interface StructuredDataViewerProps {
-  items: Array<{
-    key: string;
-    value: string;
-    line_numbers: number[];
-  }>;
+  sections: {
+    Claims?: Array<Record<string, { value: string; line_numbers: number[] }>>;
+    "Policy Info"?: Record<string, { value: string; line_numbers: number[] }>;
+    Summary?: Record<string, { value: string; line_numbers: number[] }>;
+    "Report Info"?: Record<string, { value: string; line_numbers: number[] }>;
+    Other?: Record<string, { value: string; line_numbers: number[] }>;
+  };
   onHighlight: HighlightHandler;
 }
 
@@ -56,7 +58,6 @@ function HighlightValue({
     }
 
     // First line gets strong highlight, rest get lighter
-    // Pass all line numbers and indicate which is first
     console.log(`[StructuredDataViewer] Highlighting with line numbers:`, lineNumbers);
     onHighlight(lineNumbers, true); // true indicates this is the first/primary highlight
   };
@@ -72,8 +73,8 @@ function HighlightValue({
   );
 }
 
-const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({ items, onHighlight }) => {
-  if (!items || items.length === 0) {
+const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({ sections, onHighlight }) => {
+  if (!sections || Object.keys(sections).length === 0) {
     return (
       <div className={sectionCard}>
         <p className="text-sm text-muted-foreground text-center py-4">
@@ -83,48 +84,132 @@ const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({ items, onHi
     );
   }
 
-  // Group items by key for better organization
-  const groupedByKey = items.reduce((acc, item) => {
-    const key = item.key;
-    if (!acc[key]) {
-      acc[key] = [];
-    }
-    acc[key].push(item);
-    return acc;
-  }, {} as Record<string, typeof items>);
+  // Render Claims section as a table
+  const renderClaimsSection = (claims: Array<Record<string, { value: string; line_numbers: number[] }>>) => {
+    if (!claims || claims.length === 0) return null;
 
-  const keys = Object.keys(groupedByKey).sort();
+    // Get all unique field keys from all claims
+    const allKeys = new Set<string>();
+    claims.forEach((claim) => {
+      Object.keys(claim).forEach((key) => allKeys.add(key));
+    });
+    const columnKeys = Array.from(allKeys).sort();
+
+    return (
+      <div className={sectionCard}>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold">Claims</h3>
+          <span className="text-xs text-muted-foreground">
+            {claims.length} {claims.length === 1 ? "claim" : "claims"}
+          </span>
+        </div>
+        <div className="overflow-auto">
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr className="bg-muted/50 text-xs text-muted-foreground">
+                {columnKeys.map((colKey) => (
+                  <th
+                    key={colKey}
+                    className={cn(
+                      "text-left px-3 py-2 font-medium",
+                      claims[0]?.[colKey] && isNumericValue(claims[0][colKey].value) && "text-right"
+                    )}
+                  >
+                    {formatKey(colKey)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {claims.map((claim, idx) => (
+                <tr key={idx} className="border-t border-border/50">
+                  {columnKeys.map((colKey) => {
+                    const field = claim[colKey];
+                    const isNumeric = field && isNumericValue(field.value);
+                    return (
+                      <td
+                        key={colKey}
+                        className={cn(
+                          "px-3 py-2",
+                          isNumeric && "text-right",
+                          colKey.toLowerCase().includes("description") && "max-w-[220px]"
+                        )}
+                      >
+                        {field ? (
+                          <HighlightValue
+                            lineNumbers={field.line_numbers}
+                            onHighlight={onHighlight}
+                          >
+                            {field.value}
+                          </HighlightValue>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
+  // Render flat section (Policy Info, Summary, Report Info, Other) as a grid
+  const renderFlatSection = (
+    title: string,
+    fields: Record<string, { value: string; line_numbers: number[] }>
+  ) => {
+    if (!fields || Object.keys(fields).length === 0) return null;
+
+    const fieldKeys = Object.keys(fields).sort();
+
+    return (
+      <div className={sectionCard}>
+        <h3 className="text-sm font-semibold mb-3">{title}</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+          {fieldKeys.map((key) => {
+            const field = fields[key];
+            const isNumeric = field && isNumericValue(field.value);
+            return (
+              <div key={key} className="flex flex-col">
+                <span className="text-muted-foreground">{formatKey(key)}</span>
+                {field ? (
+                  <HighlightValue
+                    lineNumbers={field.line_numbers}
+                    onHighlight={onHighlight}
+                  >
+                    {field.value}
+                  </HighlightValue>
+                ) : (
+                  <span className="text-muted-foreground">—</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-6">
-      {keys.map((key) => {
-        const keyItems = groupedByKey[key];
-        const isNumeric = keyItems.length > 0 && isNumericValue(keyItems[0].value);
+      {/* Claims Section - Table */}
+      {sections.Claims && renderClaimsSection(sections.Claims)}
 
-        return (
-          <div key={key} className={sectionCard}>
-            <h3 className="text-sm font-semibold mb-3">{formatKey(key)}</h3>
-            <div className="space-y-2">
-              {keyItems.map((item, idx) => (
-                <div
-                  key={idx}
-                  className={cn(
-                    "text-sm",
-                    isNumeric && "text-right"
-                  )}
-                >
-                  <HighlightValue
-                    lineNumbers={item.line_numbers}
-                    onHighlight={onHighlight}
-                  >
-                    {item.value}
-                  </HighlightValue>
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-      })}
+      {/* Report Info Section */}
+      {sections["Report Info"] && renderFlatSection("Report Info", sections["Report Info"])}
+
+      {/* Policy Info Section */}
+      {sections["Policy Info"] && renderFlatSection("Policy Info", sections["Policy Info"])}
+
+      {/* Summary Section */}
+      {sections.Summary && renderFlatSection("Summary", sections.Summary)}
+
+      {/* Other Section */}
+      {sections.Other && renderFlatSection("Other", sections.Other)}
     </div>
   );
 };

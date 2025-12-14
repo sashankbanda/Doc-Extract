@@ -567,9 +567,9 @@ export default function Workspace() {
                 </Button>
               </div>
             )}
-            {structuredData && structuredData.items && (
+            {structuredData && structuredData.sections && (
               <StructuredDataViewer
-                items={structuredData.items}
+                sections={structuredData.sections}
                 onHighlight={handleStructuredHighlight}
               />
             )}
