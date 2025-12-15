@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo } from "react";
 import { cn } from "@/lib/utils";
 import {
   Accordion,
@@ -6,6 +6,16 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { StructuredItem } from "@/lib/api";
+import { buildStructuredLayout, LayoutBlock } from "@/lib/structuredLayoutBuilder";
 
 type HighlightHandler = (lineIds: number[], isFirstLine: boolean) => void;
 
@@ -17,6 +27,7 @@ export interface StructuredDataViewerProps {
     "Report Info"?: Record<string, Array<{ value: string; line_numbers: number[] }>>;
     Other?: Record<string, Array<{ value: string; line_numbers: number[] }>>;
   };
+  items?: StructuredItem[];
   skipped_items?: Array<{
     key: string;
     value: string;
@@ -152,13 +163,22 @@ function HighlightValue({
 
 const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({
   sections,
+  items,
   skipped_items = [],
   onHighlight,
   expandedAccordions = [],
   onAccordionChange,
   searchQuery = "",
 }) => {
-  if (!sections || Object.keys(sections).length === 0) {
+  const layoutBlocks = useMemo<LayoutBlock[]>(() => {
+    if (items && items.length > 0) {
+      return buildStructuredLayout(items);
+    }
+    // Fallback: no flat items available yet – keep existing sections‑based rendering
+    return [];
+  }, [items]);
+
+  if ((!sections || Object.keys(sections).length === 0) && layoutBlocks.length === 0) {
     return (
       <div className={sectionCard}>
         <p className="text-sm text-muted-foreground text-center py-4">
@@ -168,7 +188,9 @@ const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({
     );
   }
 
-  // Render Claims section with accordion per claim and nested accordions
+  // Legacy renderers (accordion-based) are kept as a fallback when we don't
+  // yet have flat items to build a richer layout from. New callers should
+  // always provide `items` so we can use layout blocks instead.
   const renderClaimsSection = (
     claims: Array<Record<string, Array<{ value: string; line_numbers: number[] }>>>
   ) => {
@@ -600,26 +622,353 @@ const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({
     );
   };
 
+  // New layout-intent based rendering when layout blocks are available
+  if (layoutBlocks.length > 0) {
+    return (
+      <div className="space-y-4">
+        {layoutBlocks.map((block, idx) => {
+          if (block.type === "header") {
+            return (
+              <div key={`header-${idx}`} className={sectionCard}>
+                <h3 className="text-sm font-semibold mb-3">Policy / Header</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                  {block.items.map((item, i) => (
+                    <div
+                      key={i}
+                      className="flex flex-col space-y-1"
+                      data-search-id={
+                        item.section === "Report Info"
+                          ? `report-info-${item.label}`
+                          : `policy-info-${item.label}`
+                      }
+                    >
+                      <span className="text-muted-foreground text-xs font-medium">
+                        {formatKey(item.label)}
+                      </span>
+                      <HighlightValue
+                        lineNumbers={item.lines}
+                        onHighlight={onHighlight}
+                        showLineNumbers={true}
+                      >
+                        {item.value}
+                      </HighlightValue>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          }
+
+          if (block.type === "claims") {
+            return (
+              <div key={`claims-${idx}`} className={sectionCard}>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold">Claims</h3>
+                  <span className="text-xs text-muted-foreground">
+                    {block.rows.length} {block.rows.length === 1 ? "claim" : "claims"}
+                  </span>
+                </div>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        {block.columns.map((col) => (
+                          <TableHead
+                            key={col}
+                            className="text-xs font-medium text-muted-foreground"
+                          >
+                            {formatKey(col)}
+                          </TableHead>
+                        ))}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {block.rows.map((row, rowIdx) => {
+                        const claimId =
+                          row["Claim Number"]?.value || `${rowIdx + 1}`;
+                        return (
+                          <TableRow
+                            key={rowIdx}
+                            className="hover:bg-muted/30 transition-colors"
+                          >
+                            {block.columns.map((col) => {
+                              const cell = row[col];
+                              const lineNumbers = cell?.lines ?? [];
+                              const value = cell?.value ?? "—";
+                              const isMatch =
+                                searchQuery &&
+                                typeof value === "string" &&
+                                value
+                                  .toLowerCase()
+                                  .includes(searchQuery.toLowerCase());
+
+                              return (
+                                <TableCell
+                                  key={col}
+                                  className={cn(
+                                    "align-top text-sm",
+                                    isMatch && "bg-primary/10 rounded"
+                                  )}
+                                  data-search-id={`claim-${claimId}-${col}`}
+                                >
+                                  <HighlightValue
+                                    lineNumbers={lineNumbers}
+                                    onHighlight={onHighlight}
+                                    showLineNumbers={true}
+                                  >
+                                    {value}
+                                  </HighlightValue>
+                                </TableCell>
+                              );
+                            })}
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            );
+          }
+
+          if (block.type === "summary") {
+            return (
+              <div key={`summary-${idx}`} className={sectionCard}>
+                <h3 className="text-sm font-semibold mb-3">{block.title}</h3>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      {block.columns.map((col) => (
+                        <TableHead
+                          key={col}
+                          className="text-xs font-medium text-muted-foreground"
+                        >
+                          {formatKey(col)}
+                        </TableHead>
+                      ))}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {block.rows.map((row, rowIdx) => (
+                      <TableRow key={rowIdx}>
+                        {block.columns.map((col) => {
+                          const cell = (row as any)[col] as
+                            | { value: string; lines: number[] }
+                            | undefined;
+                          const value = cell?.value ?? "—";
+                          const lines = cell?.lines ?? [];
+                          const isMatch =
+                            searchQuery &&
+                            typeof value === "string" &&
+                            value
+                              .toLowerCase()
+                              .includes(searchQuery.toLowerCase());
+                          return (
+                            <TableCell
+                              key={col}
+                              className={cn(
+                                "text-sm",
+                                isMatch && "bg-primary/10 rounded"
+                              )}
+                              data-search-id={
+                                col === "Label" ? `summary-${value}` : undefined
+                              }
+                            >
+                              <HighlightValue
+                                lineNumbers={lines}
+                                onHighlight={onHighlight}
+                                showLineNumbers={true}
+                              >
+                                {value}
+                              </HighlightValue>
+                            </TableCell>
+                          );
+                        })}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            );
+          }
+
+          if (block.type === "summary_table") {
+            return (
+              <div key={`summary-table-${idx}`} className={sectionCard}>
+                <h3 className="text-sm font-semibold mb-3">{block.title}</h3>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        {block.columns.map((col) => (
+                          <TableHead
+                            key={col}
+                            className="text-xs font-medium text-muted-foreground"
+                          >
+                            {formatKey(col)}
+                          </TableHead>
+                        ))}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {block.rows.map((row, rowIdx) => (
+                        <TableRow key={rowIdx}>
+                          {block.columns.map((col) => {
+                            const cell = row[col];
+                            const value = cell?.value ?? "—";
+                            const lines = cell?.lines ?? [];
+                            const isMatch =
+                              searchQuery &&
+                              typeof value === "string" &&
+                              value
+                                .toLowerCase()
+                                .includes(searchQuery.toLowerCase());
+                            return (
+                              <TableCell
+                                key={col}
+                                className={cn(
+                                  "text-sm",
+                                  isMatch && "bg-primary/10 rounded"
+                                )}
+                                data-search-id={`summary-${rowIdx}-${col}`}
+                              >
+                                <HighlightValue
+                                  lineNumbers={lines}
+                                  onHighlight={onHighlight}
+                                  showLineNumbers={true}
+                                >
+                                  {value}
+                                </HighlightValue>
+                              </TableCell>
+                            );
+                          })}
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            );
+          }
+
+          if (block.type === "subtotal") {
+            return (
+              <div key={`subtotal-${idx}`} className={sectionCard}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-semibold text-muted-foreground">
+                    {block.label}
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                  {Object.entries(block.values).map(([key, cell]) => (
+                    <div key={key} className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">
+                        {formatKey(key)}
+                      </span>
+                      <HighlightValue
+                        lineNumbers={cell.lines}
+                        onHighlight={onHighlight}
+                        showLineNumbers={true}
+                      >
+                        {cell.value}
+                      </HighlightValue>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          }
+
+          if (block.type === "grand_total") {
+            return (
+              <div
+                key={`grand-total-${idx}`}
+                className={cn(sectionCard, "border-primary/60 bg-primary/5")}
+              >
+                <div className="text-xs font-semibold text-muted-foreground mb-2">
+                  Grand Total
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm font-semibold">
+                  {Object.entries(block.values).map(([key, cell]) => (
+                    <div key={key} className="flex items-center justify-between">
+                      <span>{formatKey(key)}</span>
+                      <HighlightValue
+                        lineNumbers={cell.lines}
+                        onHighlight={onHighlight}
+                        showLineNumbers={true}
+                      >
+                        {cell.value}
+                      </HighlightValue>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          }
+
+          return null;
+        })}
+
+        {/* Skipped Items Section - Only if items exist (should be empty in new format) */}
+        {skipped_items && skipped_items.length > 0 && (
+          <div className={sectionCard}>
+            <Accordion type="single" collapsible className="w-full">
+              <AccordionItem value="skipped" className="border-none">
+                <AccordionTrigger className="text-sm font-semibold hover:no-underline py-2">
+                  <div className="flex items-center justify-between w-full pr-4">
+                    <span>Skipped / Unplaced Fields</span>
+                    <span className="text-xs text-muted-foreground font-normal">
+                      {skipped_items.length}{" "}
+                      {skipped_items.length === 1 ? "item" : "items"}
+                    </span>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent>
+                  <div className="space-y-2 pt-2">
+                    {skipped_items.map((item, idx) => (
+                      <div
+                        key={idx}
+                        className="text-sm border-l-2 border-muted pl-3 py-1"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium">
+                              {item.key || "(no key)"}
+                            </div>
+                            <HighlightValue
+                              lineNumbers={item.line_numbers}
+                              onHighlight={onHighlight}
+                              showLineNumbers={true}
+                            >
+                              {item.value}
+                            </HighlightValue>
+                          </div>
+                          <span className="text-xs text-muted-foreground whitespace-nowrap">
+                            {item.reason}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Fallback to legacy accordion-based rendering if layout blocks aren't available
   return (
     <div className="space-y-4">
-      {/* Claims Section - Accordion per claim, default open */}
       {sections.Claims && renderClaimsSection(sections.Claims)}
-
-      {/* Report Info Section - Collapsed by default */}
       {sections["Report Info"] &&
         renderFlatSection("Report Info", sections["Report Info"])}
-
-      {/* Policy Info Section - Collapsed by default */}
       {sections["Policy Info"] &&
         renderFlatSection("Policy Info", sections["Policy Info"])}
-
-      {/* Summary Section - Collapsed by default */}
       {sections.Summary && renderFlatSection("Summary", sections.Summary)}
-
-      {/* Other Section - Collapsed by default, REQUIRED, with visual grouping */}
       {sections.Other && renderOtherSection(sections.Other)}
-
-      {/* Skipped Items Section - Only if items exist (should be empty in new format) */}
       {skipped_items && skipped_items.length > 0 && (
         <div className={sectionCard}>
           <Accordion type="single" collapsible className="w-full">
@@ -628,17 +977,23 @@ const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({
                 <div className="flex items-center justify-between w-full pr-4">
                   <span>Skipped / Unplaced Fields</span>
                   <span className="text-xs text-muted-foreground font-normal">
-                    {skipped_items.length} {skipped_items.length === 1 ? "item" : "items"}
+                    {skipped_items.length}{" "}
+                    {skipped_items.length === 1 ? "item" : "items"}
                   </span>
                 </div>
               </AccordionTrigger>
               <AccordionContent>
                 <div className="space-y-2 pt-2">
                   {skipped_items.map((item, idx) => (
-                    <div key={idx} className="text-sm border-l-2 border-muted pl-3 py-1">
+                    <div
+                      key={idx}
+                      className="text-sm border-l-2 border-muted pl-3 py-1"
+                    >
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1 min-w-0">
-                          <div className="font-medium">{item.key || "(no key)"}</div>
+                          <div className="font-medium">
+                            {item.key || "(no key)"}
+                          </div>
                           <HighlightValue
                             lineNumbers={item.line_numbers}
                             onHighlight={onHighlight}

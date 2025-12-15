@@ -942,6 +942,7 @@ export default function Workspace() {
             {structuredData && structuredData.sections && (
               <StructuredDataViewer
                 sections={structuredData.sections}
+                items={structuredData.items}
                 skipped_items={[]} // No skipped items in new format - everything is preserved
                 onHighlight={handleStructuredHighlight}
                 expandedAccordions={effectiveExpandedAccordions}

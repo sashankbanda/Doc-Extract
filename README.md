@@ -213,7 +213,7 @@ The AI never provides coordinates. All coordinate calculations use the line meta
 
 5. Start the backend server:
    ```bash
-   uvicorn backend.main:app --reload --port 8000
+   uvicorn backend.main:app --reload --port 8005
    ```
 
 ### Frontend Setup
