@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { FileText, Table, Sparkles, Loader2, RotateCcw, Search, X } from "lucide-react";
+import { FileText, Table, Sparkles, Loader2, RotateCcw, Search, X, Hash } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,13 +26,15 @@ import { apiRetrieve, apiHighlight, API_BASE, structureDocument, getStructuredDo
 import { organizeStructuredData } from "@/lib/organizeStructuredData";
 import DocumentViewer, { guessFileType } from "@/components/DocumentViewer";
 import StructuredDataViewer from "@/components/StructuredDataViewer";
+import CanonicalNameViewer from "@/components/CanonicalNameViewer";
 import { useDocumentContext } from "@/context/DocumentContext";
 
-type TabType = "text" | "tables";
+type TabType = "text" | "tables" | "cn";
 
 const tabs: { id: TabType; label: string; icon: typeof FileText }[] = [
   { id: "text", label: "Raw Text", icon: FileText },
   { id: "tables", label: "Structured Data", icon: Table },
+  { id: "cn", label: "CN", icon: Hash },
 ];
 
 export default function Workspace() {
@@ -922,7 +924,7 @@ export default function Workspace() {
           <div className="space-y-4 min-w-[720px]">
             {!structuredData && !structureError && (
               <div className="text-sm text-muted-foreground">
-                Run “Analyze with AI” to view structured data.
+                Run "Analyze with AI" to view structured data.
               </div>
             )}
             {structureError && (
@@ -947,6 +949,38 @@ export default function Workspace() {
                 expandedAccordions={effectiveExpandedAccordions}
                 onAccordionChange={setUserExpandedAccordions}
                 searchQuery={searchQuery}
+              />
+            )}
+          </div>
+        );
+      case "cn":
+        return (
+          <div className="space-y-4 min-w-[720px]">
+            {!structuredData && !structureError && (
+              <div className="text-sm text-muted-foreground">
+                Run "Analyze with AI" to view canonical name data.
+              </div>
+            )}
+            {structureError && (
+              <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4">
+                <div className="text-sm font-semibold text-destructive mb-2">Error</div>
+                <p className="text-sm text-destructive">{structureError}</p>
+                <Button
+                  onClick={handleStructureDocument}
+                  variant="outline"
+                  size="sm"
+                  className="mt-2"
+                >
+                  Retry
+                </Button>
+              </div>
+            )}
+            {structuredData && structuredData.items && (
+              <CanonicalNameViewer
+                items={structuredData.items}
+                onHighlight={handleStructuredHighlight}
+                expandedAccordions={effectiveExpandedAccordions}
+                onAccordionChange={setUserExpandedAccordions}
               />
             )}
           </div>
