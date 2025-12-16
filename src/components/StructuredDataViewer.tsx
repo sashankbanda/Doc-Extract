@@ -18,7 +18,8 @@ export interface StructuredDataViewerProps {
     Other?: Record<string, Array<{ value: string; line_numbers: number[] }>>;
   };
   skipped_items?: Array<{
-    key: string;
+    source_key: string;
+    canonical_name?: string | null;
     value: string;
     line_numbers: number[];
     reason: string;
@@ -638,7 +639,17 @@ const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({
                     <div key={idx} className="text-sm border-l-2 border-muted pl-3 py-1">
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1 min-w-0">
-                          <div className="font-medium">{item.key || "(no key)"}</div>
+                          <div className="font-medium">
+                            {item.canonical_name ? (
+                              <span>
+                                <span className="text-muted-foreground">{item.source_key || "(no key)"}</span>
+                                <span className="mx-2">→</span>
+                                <span>{formatKey(item.canonical_name)}</span>
+                              </span>
+                            ) : (
+                              item.source_key || "(no key)"
+                            )}
+                          </div>
                           <HighlightValue
                             lineNumbers={item.line_numbers}
                             onHighlight={onHighlight}

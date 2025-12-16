@@ -125,7 +125,7 @@ def tag_items(items: List[Dict]) -> List[Dict]:
     Add semantic_type to all items in the list.
     
     Args:
-        items: List of items with {key, value, line_numbers}
+        items: List of items with {source_key, value, line_numbers} (or {key, value, line_numbers} for backward compatibility)
         
     Returns:
         List of items with added semantic_type field
@@ -133,7 +133,8 @@ def tag_items(items: List[Dict]) -> List[Dict]:
     tagged_items = []
     
     for item in items:
-        key = item.get("key", "")
+        # Support both "key" (old format) and "source_key" (new format) for backward compatibility
+        key = item.get("source_key", item.get("key", ""))
         semantic_type = tag_semantic_type(key)
         
         tagged_item = {
