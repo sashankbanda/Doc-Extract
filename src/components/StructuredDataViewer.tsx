@@ -6,6 +6,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { EditableValue } from "@/components/EditableValue";
 
 type HighlightHandler = (lineIds: number[], isFirstLine: boolean) => void;
 
@@ -30,6 +31,16 @@ export interface StructuredDataViewerProps {
   searchQuery?: string;
   onSearchResultClick?: (result: any) => void;
   searchResults?: any[];
+  isEditMode?: boolean;
+  onValueChange?: (itemId: string, newValue: string) => void;
+  getItemValue?: (item: { value: string; line_numbers: number[] }, itemId: string) => string;
+  items?: Array<{
+    source_key: string;
+    canonical_name?: string | null;
+    value: string;
+    line_numbers: number[];
+    semantic_type: string;
+  }>;
 }
 
 const sectionCard = "rounded-lg border border-border/50 bg-muted/30 p-4";
@@ -158,7 +169,37 @@ const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({
   expandedAccordions = [],
   onAccordionChange,
   searchQuery = "",
+  isEditMode = false,
+  onValueChange,
+  getItemValue,
+  items = [],
 }) => {
+  // Helper to find item ID from value and line_numbers
+  const getItemId = (value: string, lineNumbers: number[]): string => {
+    const matchingItem = items.find(
+      (item) => item.value === value && 
+      JSON.stringify(item.line_numbers.sort()) === JSON.stringify(lineNumbers.sort())
+    );
+    if (matchingItem) {
+      return `${matchingItem.source_key}|${matchingItem.value}|${matchingItem.line_numbers.join(',')}`;
+    }
+    // Fallback: create ID from value and line_numbers
+    return `|${value}|${lineNumbers.join(',')}`;
+  };
+
+  // Helper to get display value
+  const getDisplayValue = (value: string, lineNumbers: number[]): string => {
+    if (!isEditMode || !getItemValue) return value;
+    const itemId = getItemId(value, lineNumbers);
+    const matchingItem = items.find(
+      (item) => item.value === value && 
+      JSON.stringify(item.line_numbers.sort()) === JSON.stringify(lineNumbers.sort())
+    );
+    if (matchingItem) {
+      return getItemValue(matchingItem, itemId);
+    }
+    return value;
+  };
   if (!sections || Object.keys(sections).length === 0) {
     return (
       <div className={sectionCard}>
@@ -267,13 +308,17 @@ const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({
                               className="text-sm flex items-start gap-2"
                             >
                               <span className="text-muted-foreground">•</span>
-                              <HighlightValue
+                              <EditableValue
+                                value={getDisplayValue(item.value, item.line_numbers)}
+                                isEditMode={isEditMode}
+                                onChange={(newValue) => {
+                                  const itemId = getItemId(item.value, item.line_numbers);
+                                  onValueChange?.(itemId, newValue);
+                                }}
+                                onHighlight={() => onHighlight(item.line_numbers, true)}
                                 lineNumbers={item.line_numbers}
-                                onHighlight={onHighlight}
                                 showLineNumbers={true}
-                              >
-                                {item.value}
-                              </HighlightValue>
+                              />
                             </div>
                           ))}
                         </div>
@@ -432,13 +477,17 @@ const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({
                               )}
                             >
                               <span className="text-muted-foreground text-xs">•</span>
-                              <HighlightValue
+                              <EditableValue
+                                value={getDisplayValue(item.value, item.line_numbers)}
+                                isEditMode={isEditMode}
+                                onChange={(newValue) => {
+                                  const itemId = getItemId(item.value, item.line_numbers);
+                                  onValueChange?.(itemId, newValue);
+                                }}
+                                onHighlight={() => onHighlight(item.line_numbers, true)}
                                 lineNumbers={item.line_numbers}
-                                onHighlight={onHighlight}
                                 showLineNumbers={true}
-                              >
-                                {item.value}
-                              </HighlightValue>
+                              />
                             </div>
                           );
                         })}

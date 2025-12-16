@@ -7,6 +7,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { StructuredItem } from "@/lib/api";
+import { EditableValue } from "@/components/EditableValue";
 
 type HighlightHandler = (lineIds: number[], isFirstLine: boolean) => void;
 
@@ -15,6 +16,9 @@ export interface CanonicalNameViewerProps {
   onHighlight: HighlightHandler;
   expandedAccordions?: string[];
   onAccordionChange?: (value: string[]) => void;
+  isEditMode?: boolean;
+  onValueChange?: (itemId: string, newValue: string) => void;
+  getItemValue?: (item: StructuredItem) => string;
 }
 
 // Canonical name order as specified
@@ -101,6 +105,9 @@ const CanonicalNameViewer: React.FC<CanonicalNameViewerProps> = ({
   onHighlight,
   expandedAccordions = [],
   onAccordionChange,
+  isEditMode = false,
+  onValueChange,
+  getItemValue,
 }) => {
   // Group items by canonical_name
   const itemsByCanonical: Record<string, StructuredItem[]> = {};
@@ -181,29 +188,36 @@ const CanonicalNameViewer: React.FC<CanonicalNameViewerProps> = ({
                           </tr>
                         </thead>
                         <tbody>
-                          {canonicalItems.map((item, idx) => (
-                            <tr
-                              key={idx}
-                              className="border-b border-border/20 hover:bg-muted/50"
-                            >
-                              <td className="p-2 text-muted-foreground">
-                                {item.source_key || "(no key)"}
-                              </td>
-                              <td className="p-2">
-                                <HighlightValue
-                                  lineNumbers={item.line_numbers}
-                                  onHighlight={onHighlight}
-                                >
-                                  {item.value || "(no value)"}
-                                </HighlightValue>
-                              </td>
-                              <td className="p-2 text-muted-foreground font-mono text-xs">
-                                {item.line_numbers.length > 0
-                                  ? item.line_numbers.join(", ")
-                                  : "—"}
-                              </td>
-                            </tr>
-                          ))}
+                          {canonicalItems.map((item, idx) => {
+                            const itemId = `${item.source_key}|${item.value}|${item.line_numbers.join(',')}`;
+                            const displayValue = getItemValue ? getItemValue(item) : item.value;
+                            
+                            return (
+                              <tr
+                                key={idx}
+                                className="border-b border-border/20 hover:bg-muted/50"
+                              >
+                                <td className="p-2 text-muted-foreground">
+                                  {item.source_key || "(no key)"}
+                                </td>
+                                <td className="p-2">
+                                  <EditableValue
+                                    value={displayValue || "(no value)"}
+                                    isEditMode={isEditMode}
+                                    onChange={(newValue) => onValueChange?.(itemId, newValue)}
+                                    onHighlight={() => onHighlight(item.line_numbers, true)}
+                                    lineNumbers={item.line_numbers}
+                                    showLineNumbers={false}
+                                  />
+                                </td>
+                                <td className="p-2 text-muted-foreground font-mono text-xs">
+                                  {item.line_numbers.length > 0
+                                    ? item.line_numbers.join(", ")
+                                    : "—"}
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>

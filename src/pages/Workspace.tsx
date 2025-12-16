@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { FileText, Table, Sparkles, Loader2, RotateCcw, Search, X, Hash } from "lucide-react";
+import { FileText, Table, Sparkles, Loader2, RotateCcw, Search, X, Hash, Edit2, Save, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,7 +22,7 @@ import { PDFViewerWrapper } from "@/components/workspace/PDFViewerWrapper";
 import { ExtractedTextPanel } from "@/components/workspace/ExtractedTextPanel";
 import { StructuredTablePanel } from "@/components/workspace/StructuredTablePanel";
 import { BoundingBox, LayoutText, ExtractedTable } from "@/types/document";
-import { apiRetrieve, apiHighlight, API_BASE, structureDocument, getStructuredDocument, StructuredDataResponse, OrganizedStructuredData } from "@/lib/api";
+import { apiRetrieve, apiHighlight, API_BASE, structureDocument, getStructuredDocument, updateStructuredDocument, StructuredDataResponse, OrganizedStructuredData, StructuredItem } from "@/lib/api";
 import { organizeStructuredData } from "@/lib/organizeStructuredData";
 import DocumentViewer, { guessFileType } from "@/components/DocumentViewer";
 import StructuredDataViewer from "@/components/StructuredDataViewer";
@@ -78,6 +78,9 @@ export default function Workspace() {
   const [structureError, setStructureError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [userExpandedAccordions, setUserExpandedAccordions] = useState<string[]>([]);
+  const [isEditMode, setIsEditMode] = useState<boolean>(false);
+  const [editedItems, setEditedItems] = useState<Map<string, StructuredItem>>(new Map());
+  const [isSaving, setIsSaving] = useState<boolean>(false);
   const structuredDataViewerRef = useRef<HTMLDivElement>(null);
   const extractedTextPanelRef = useRef<HTMLDivElement>(null);
 
@@ -445,6 +448,19 @@ export default function Workspace() {
     ...secondaryHighlights
   ];
 
+  // Convert highlights to rectangle format for non-PDF viewers
+  const highlightRects = useMemo(
+    () =>
+      allHighlights.map((box) => ({
+        page: box.page,
+        x1: box.x,
+        y1: box.y,
+        x2: box.x + box.width,
+        y2: box.y + box.height,
+      })),
+    [allHighlights]
+  );
+
   // Handle structure document with caching
   const handleStructureDocument = useCallback(async () => {
     if (!whisperHash) return;
@@ -479,6 +495,89 @@ export default function Workspace() {
       setStructureLoading(false);
     }
   }, [whisperHash, dataCache, cacheData]);
+
+  // Edit mode handlers
+  const handleEditModeToggle = useCallback(() => {
+    if (isEditMode) {
+      // Cancel edit mode - discard changes
+      setEditedItems(new Map());
+      setIsEditMode(false);
+    } else {
+      // Enter edit mode
+      setIsEditMode(true);
+    }
+  }, [isEditMode]);
+
+  const handleItemValueChange = useCallback((itemId: string, newValue: string) => {
+    if (!structuredData || !structuredData.items) return;
+    
+    const item = structuredData.items.find((it) => {
+      const id = `${it.source_key}|${it.value}|${it.line_numbers.join(',')}`;
+      return id === itemId;
+    });
+    
+    if (!item) return;
+    
+    setEditedItems((prev) => {
+      const updated = new Map(prev);
+      updated.set(itemId, {
+        ...item,
+        value: newValue,
+      });
+      return updated;
+    });
+  }, [structuredData]);
+
+  const handleSaveChanges = useCallback(async () => {
+    if (!whisperHash || !structuredData || !structuredData.items) return;
+    
+    setIsSaving(true);
+    try {
+      // Merge edited items with original items
+      const updatedItems = structuredData.items.map((item) => {
+        const itemId = `${item.source_key}|${item.value}|${item.line_numbers.join(',')}`;
+        const editedItem = editedItems.get(itemId);
+        return editedItem || item;
+      });
+      
+      // Update backend
+      await updateStructuredDocument(whisperHash, updatedItems);
+      
+      // Reorganize with updated items
+      const organized = organizeStructuredData(updatedItems);
+      
+      // Update state and cache
+      setStructuredData(organized);
+      const cachedData = dataCache[whisperHash];
+      cacheData(whisperHash, {
+        ...cachedData,
+        structured: organized,
+      });
+      
+      // Clear edited items and exit edit mode
+      setEditedItems(new Map());
+      setIsEditMode(false);
+    } catch (err: any) {
+      console.error("[Workspace] Save changes error:", err);
+      setStructureError(err.message || "Failed to save changes");
+    } finally {
+      setIsSaving(false);
+    }
+  }, [whisperHash, structuredData, editedItems, dataCache, cacheData]);
+
+  // Get edited item value or original
+  const getItemValue = useCallback((item: StructuredItem | { value: string; line_numbers: number[]; source_key?: string }, itemId?: string): string => {
+    if (!itemId) {
+      // Fallback: create ID from item
+      const structuredItem = item as StructuredItem;
+      itemId = `${structuredItem.source_key}|${structuredItem.value}|${structuredItem.line_numbers.join(',')}`;
+    }
+    const editedItem = editedItems.get(itemId);
+    return editedItem ? editedItem.value : item.value;
+  }, [editedItems]);
+
+  // Check if there are unsaved changes
+  const hasUnsavedChanges = editedItems.size > 0;
 
   // Mock data for tables (can be enhanced later)
   const mockTables: ExtractedTable[] = [];
@@ -941,7 +1040,7 @@ export default function Workspace() {
                 </Button>
               </div>
             )}
-            {structuredData && structuredData.sections && (
+            {structuredData && structuredData.sections && structuredData.items && (
               <StructuredDataViewer
                 sections={structuredData.sections}
                 skipped_items={[]} // No skipped items in new format - everything is preserved
@@ -949,6 +1048,10 @@ export default function Workspace() {
                 expandedAccordions={effectiveExpandedAccordions}
                 onAccordionChange={setUserExpandedAccordions}
                 searchQuery={searchQuery}
+                isEditMode={isEditMode}
+                onValueChange={handleItemValueChange}
+                getItemValue={getItemValue}
+                items={structuredData.items}
               />
             )}
           </div>
@@ -981,6 +1084,9 @@ export default function Workspace() {
                 onHighlight={handleStructuredHighlight}
                 expandedAccordions={effectiveExpandedAccordions}
                 onAccordionChange={setUserExpandedAccordions}
+                isEditMode={isEditMode}
+                onValueChange={handleItemValueChange}
+                getItemValue={getItemValue}
               />
             )}
           </div>
@@ -1038,7 +1144,7 @@ export default function Workspace() {
             <DocumentViewer
               fileUrl={documentUrl}
               fileType={fileType}
-              highlights={allHighlights}
+              highlights={highlightRects}
               onPageDimensions={handlePageDimensions}
             />
           )
@@ -1046,7 +1152,7 @@ export default function Workspace() {
         rightPane={
           <div className="h-full flex flex-col">
             {/* Header with file selector */}
-            <div className="flex items-center justify-between p-4 border-b border-border/50 gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-3 p-4 border-b border-border/50">
               <div className="flex items-center gap-2 flex-1 min-w-0">
                 <FileSelectorDropdown
                   files={documents
@@ -1111,26 +1217,75 @@ export default function Workspace() {
                   </AlertDialogContent>
                 </AlertDialog>
               </div>
-              <Button
-                onClick={handleStructureDocument}
-                disabled={structureLoading || !resultText}
-                variant="outline"
-                size="sm"
-                className="gap-2 shrink-0"
-              >
-                {structureLoading ? (
+              <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end w-full sm:w-auto">
+                {structuredData && structuredData.items && structuredData.items.length > 0 && (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span className="hidden sm:inline">Analyzing...</span>
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-4 h-4" />
-                    <span className="hidden sm:inline">Analyze with AI</span>
-                    <span className="sm:hidden">Analyze</span>
+                    {!isEditMode ? (
+                      <Button
+                        onClick={handleEditModeToggle}
+                        variant="outline"
+                        size="sm"
+                        className="gap-2 whitespace-nowrap"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                        <span className="hidden sm:inline">Edit</span>
+                      </Button>
+                    ) : (
+                      <>
+                        <Button
+                          onClick={handleSaveChanges}
+                          disabled={isSaving || !hasUnsavedChanges}
+                          variant="default"
+                          size="sm"
+                          className="gap-2 whitespace-nowrap"
+                        >
+                          {isSaving ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              <span className="hidden sm:inline">Saving...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Save className="w-4 h-4" />
+                              <span className="hidden sm:inline">Save Changes</span>
+                            </>
+                          )}
+                        </Button>
+                        <Button
+                          onClick={handleEditModeToggle}
+                          variant="outline"
+                          size="sm"
+                          className="gap-2 whitespace-nowrap"
+                          disabled={isSaving}
+                        >
+                          <XCircle className="w-4 h-4" />
+                          <span className="hidden sm:inline">Cancel</span>
+                        </Button>
+                      </>
+                    )}
                   </>
                 )}
-              </Button>
+                <Button
+                  onClick={handleStructureDocument}
+                  disabled={structureLoading || !resultText || isEditMode}
+                  variant="outline"
+                  size="sm"
+                  className="gap-2 shrink-0 whitespace-nowrap"
+                >
+                  {structureLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span className="hidden sm:inline">Analyzing...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4" />
+                      <span className="hidden sm:inline">Analyze with AI</span>
+                      <span className="sm:hidden">Analyze</span>
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
 
             {/* Tabs and Search */}

@@ -1,9 +1,23 @@
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+from typing import List, Optional, Dict, Any
 
 from backend.services.file_store import file_store
 from backend.services.llm_service import llm_service
 
 router = APIRouter()
+
+
+class StructuredItemUpdate(BaseModel):
+    source_key: str
+    canonical_name: Optional[str] = None
+    value: str
+    line_numbers: List[int]
+    semantic_type: str
+
+
+class StructuredDataUpdate(BaseModel):
+    items: List[StructuredItemUpdate]
 
 
 @router.get("/structure/{whisper_hash}")
@@ -43,6 +57,29 @@ async def structure_document(whisper_hash: str):
         "metadata": stored.get("metadata"),
     }
 
+    file_store.save_json_output(whisper_hash, output_payload, suffix="_structured")
+    return output_payload
+
+
+@router.put("/structure/{whisper_hash}")
+async def update_structured_document(whisper_hash: str, data: StructuredDataUpdate):
+    """Update existing structured data with edited values."""
+    # Get existing structured data to preserve metadata
+    existing_data = file_store.get_json_output(whisper_hash, suffix="_structured")
+    if not existing_data:
+        raise HTTPException(status_code=404, detail="Structured data not found")
+    
+    # Convert Pydantic models to dicts
+    items_dict = [item.dict() for item in data.items]
+    
+    # Update payload with edited items
+    output_payload = {
+        "whisper_hash": whisper_hash,
+        "items": items_dict,
+        "metadata": existing_data.get("metadata"),
+    }
+    
+    # Save updated structured data
     file_store.save_json_output(whisper_hash, output_payload, suffix="_structured")
     return output_payload
 
