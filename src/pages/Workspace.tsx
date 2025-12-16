@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { FileText, Table, Sparkles, Loader2, RotateCcw, Search, X, Hash, Edit2, Save, XCircle } from "lucide-react";
+import { FileText, Table, Sparkles, Loader2, RotateCcw, Search, X, Hash, Edit2, Save, XCircle, Maximize2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -83,6 +83,7 @@ export default function Workspace() {
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const structuredDataViewerRef = useRef<HTMLDivElement>(null);
   const extractedTextPanelRef = useRef<HTMLDivElement>(null);
+  const rightPaneRef = useRef<HTMLDivElement>(null);
 
   const handlePageDimensions = useCallback((pageNum: number, width: number, height: number) => {
     setPageDimensions(prev => {
@@ -1150,7 +1151,7 @@ export default function Workspace() {
           )
         }
         rightPane={
-          <div className="h-full flex flex-col">
+          <div className="h-full flex flex-col" ref={rightPaneRef}>
             {/* Header with file selector */}
             <div className="flex flex-wrap items-center justify-between gap-3 p-4 border-b border-border/50">
               <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -1218,6 +1219,26 @@ export default function Workspace() {
                 </AlertDialog>
               </div>
               <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end w-full sm:w-auto">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="shrink-0"
+                  title="Enter fullscreen"
+                  onClick={async () => {
+                    if (!rightPaneRef.current) return;
+                    try {
+                      if (rightPaneRef.current.requestFullscreen) {
+                        await rightPaneRef.current.requestFullscreen();
+                      } else if ((rightPaneRef.current as any).webkitRequestFullscreen) {
+                        await (rightPaneRef.current as any).webkitRequestFullscreen();
+                      }
+                    } catch (err) {
+                      console.error("[Workspace] Fullscreen error:", err);
+                    }
+                  }}
+                >
+                  <Maximize2 className="w-4 h-4" />
+                </Button>
                 {structuredData && structuredData.items && structuredData.items.length > 0 && (
                   <>
                     {!isEditMode ? (
