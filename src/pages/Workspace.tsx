@@ -89,6 +89,7 @@ export default function Workspace() {
   const qaRowRefs = useRef<Map<number, HTMLTableRowElement>>(new Map());
   const previousHighlightLineRef = useRef<number | null>(null);
   const qaHorizontalProgressRef = useRef<number | null>(null); // 0 (left) -> 1 (right)
+  const qaLineScrollStateRef = useRef<{ line: number; baselineLeft: number } | null>(null);
   const [qaSelectedIndex, setQaSelectedIndex] = useState<number>(0);
   const [qaEditingId, setQaEditingId] = useState<string | null>(null);
   const [qaDraftKey, setQaDraftKey] = useState<string>("");
@@ -838,12 +839,41 @@ export default function Workspace() {
             let targetScrollLeft = scrollContainer.scrollLeft;
 
             // If QA navigation is active, pan horizontally based on progress (0 = left, 1 = right)
-            if (qaHorizontalProgressRef.current != null) {
+            if (qaHorizontalProgressRef.current != null && previousHighlightLineRef.current != null) {
+              const currentLine = previousHighlightLineRef.current;
+
+              // Initialize per-line baseline the first time we scroll for this line.
+              // For a new line, always start from the left edge (baselineLeft = 0)
+              // so horizontal position fully resets when changing lines.
+              if (!qaLineScrollStateRef.current || qaLineScrollStateRef.current.line !== currentLine) {
+                qaLineScrollStateRef.current = {
+                  line: currentLine,
+                  baselineLeft: 0,
+                };
+              }
+
+              const { baselineLeft } = qaLineScrollStateRef.current;
+
+              // Only scroll horizontally if there's meaningful horizontal overflow
               const maxScrollLeft = Math.max(
                 0,
                 scrollContainer.scrollWidth - scrollContainer.clientWidth
               );
-              targetScrollLeft = maxScrollLeft * qaHorizontalProgressRef.current;
+
+              if (maxScrollLeft > 32) {
+                // Move at most half a viewport width from the baseline so the highlight stays visible
+                const maxDelta = scrollContainer.clientWidth * 0.5;
+                const rawTarget =
+                  baselineLeft + maxDelta * qaHorizontalProgressRef.current;
+
+                // Clamp within scrollable bounds
+                targetScrollLeft = Math.min(
+                  Math.max(0, rawTarget),
+                  maxScrollLeft
+                );
+              } else {
+                targetScrollLeft = baselineLeft;
+              }
             }
 
             scrollContainer.scrollTo({
