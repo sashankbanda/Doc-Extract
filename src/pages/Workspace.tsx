@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { FileText, Table, Sparkles, Loader2, RotateCcw, Search, X, Hash, Edit2, Save, XCircle, Maximize2, Check } from "lucide-react";
+import { FileText, Table, Sparkles, Loader2, RotateCcw, Search, X, Hash, Edit2, Save, XCircle, Maximize2, Check, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -89,9 +89,11 @@ export default function Workspace() {
   const qaRowRefs = useRef<Map<number, HTMLTableRowElement>>(new Map());
   const [qaSelectedIndex, setQaSelectedIndex] = useState<number>(0);
   const [qaEditingId, setQaEditingId] = useState<string | null>(null);
+  const [qaDraftKey, setQaDraftKey] = useState<string>("");
   const [qaDraftValue, setQaDraftValue] = useState<string>("");
   const [qaSavingId, setQaSavingId] = useState<string | null>(null);
   const [qaError, setQaError] = useState<string | null>(null);
+  const [qaDeletingId, setQaDeletingId] = useState<string | null>(null);
 
   const buildItemId = useCallback((item: StructuredItem) => {
     return `${item.source_key}|${item.value}|${item.line_numbers.join(",")}`;
@@ -608,9 +610,9 @@ export default function Workspace() {
   // Mock data for tables (can be enhanced later)
   const mockTables: ExtractedTable[] = [];
 
-  // QA editing: save a single item's value inline
+  // QA editing: save a single item's source key + value inline
   const handleQASave = useCallback(
-    async (itemId: string, newValue: string) => {
+    async (itemId: string, newSourceKey: string, newValue: string) => {
       if (!whisperHash || !structuredData || !structuredData.items) return;
 
       const index = structuredData.items.findIndex((it) => buildItemId(it) === itemId);
@@ -621,7 +623,13 @@ export default function Workspace() {
 
       try {
         const updatedItems = structuredData.items.map((item, idx) =>
-          idx === index ? { ...item, value: newValue } : item
+          idx === index
+            ? {
+                ...item,
+                source_key: newSourceKey || item.source_key,
+                value: newValue,
+              }
+            : item
         );
 
         const response = await updateStructuredDocument(whisperHash, updatedItems);
@@ -645,6 +653,46 @@ export default function Workspace() {
       }
     },
     [whisperHash, structuredData, buildItemId, dataCache, cacheData]
+  );
+
+  // QA delete: remove a single row
+  const handleQADelete = useCallback(
+    async (itemId: string) => {
+      if (!whisperHash || !structuredData || !structuredData.items) return;
+
+      setQaDeletingId(itemId);
+      setQaError(null);
+
+      try {
+        const updatedItems = structuredData.items.filter((it) => buildItemId(it) !== itemId);
+
+        const response = await updateStructuredDocument(whisperHash, updatedItems);
+        const organized = organizeStructuredData(response.items || updatedItems);
+
+        setStructuredData(organized);
+
+        const cachedData = dataCache[whisperHash];
+        cacheData(whisperHash, {
+          ...cachedData,
+          structured: organized,
+        });
+
+        setQaEditingId(null);
+        setQaDraftKey("");
+        setQaDraftValue("");
+
+        // Adjust selection index if needed
+        if (qaSelectedIndex >= updatedItems.length) {
+          setQaSelectedIndex(Math.max(0, updatedItems.length - 1));
+        }
+      } catch (err: any) {
+        console.error("[Workspace] QA delete error:", err);
+        setQaError(err.message || "Failed to delete row");
+      } finally {
+        setQaDeletingId(null);
+      }
+    },
+    [whisperHash, structuredData, buildItemId, dataCache, cacheData, qaSelectedIndex]
   );
 
   // Highlight a specific line id (0-based) using existing highlight API
@@ -1263,7 +1311,17 @@ export default function Workspace() {
                           onClick={() => highlightQAItem(index)}
                         >
                           <td className="p-2 text-muted-foreground whitespace-nowrap">
-                            {item.source_key || "(no key)"}
+                            {isEditing ? (
+                              <Input
+                                value={qaDraftKey}
+                                onChange={(e) => setQaDraftKey(e.target.value)}
+                                className="text-sm"
+                                placeholder="Source key"
+                                autoFocus
+                              />
+                            ) : (
+                              item.source_key || "(no key)"
+                            )}
                           </td>
                           <td className="p-2">
                             {isEditing ? (
@@ -1271,7 +1329,6 @@ export default function Workspace() {
                                 value={qaDraftValue}
                                 onChange={(e) => setQaDraftValue(e.target.value)}
                                 className="text-sm"
-                                autoFocus
                               />
                             ) : (
                               <span className="break-words">
@@ -1289,7 +1346,7 @@ export default function Workspace() {
                                   disabled={qaSavingId === itemId}
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    handleQASave(itemId, qaDraftValue);
+                                    handleQASave(itemId, qaDraftKey, qaDraftValue);
                                   }}
                                   title="Save"
                                 >
@@ -1299,10 +1356,11 @@ export default function Workspace() {
                                   size="icon"
                                   variant="ghost"
                                   className="h-7 w-7 text-destructive hover:text-destructive/90"
-                                  disabled={qaSavingId === itemId}
+                                  disabled={qaSavingId === itemId || qaDeletingId === itemId}
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     setQaEditingId(null);
+                                    setQaDraftKey("");
                                     setQaDraftValue("");
                                     setQaError(null);
                                   }}
@@ -1310,6 +1368,40 @@ export default function Workspace() {
                                 >
                                   <X className="w-4 h-4" />
                                 </Button>
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button
+                                      size="icon"
+                                      variant="ghost"
+                                      className="h-7 w-7 text-destructive hover:text-destructive/90"
+                                      disabled={qaSavingId === itemId || qaDeletingId === itemId}
+                                      onClick={(e) => e.stopPropagation()}
+                                      title="Delete row"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Delete this row?</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        This will remove the selected source key and value from the structured data. This action cannot be undone.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                      <AlertDialogAction
+                                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleQADelete(itemId);
+                                        }}
+                                      >
+                                        Delete
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
                               </div>
                             ) : (
                               <Button
@@ -1319,6 +1411,7 @@ export default function Workspace() {
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setQaEditingId(itemId);
+                                  setQaDraftKey(item.source_key || "");
                                   setQaDraftValue(displayValue);
                                   setQaError(null);
                                 }}
