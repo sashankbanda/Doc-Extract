@@ -25,17 +25,19 @@ import { BoundingBox, LayoutText, ExtractedTable } from "@/types/document";
 import { apiRetrieve, apiHighlight, API_BASE, structureDocument, getStructuredDocument, updateStructuredDocument, StructuredDataResponse, OrganizedStructuredData, StructuredItem } from "@/lib/api";
 import { organizeStructuredData } from "@/lib/organizeStructuredData";
 import DocumentViewer, { guessFileType } from "@/components/DocumentViewer";
+import { parseSimpleLossRunTable, parseMultiHeaderLossRunTable, ST_CANONICAL_FIELDS, FixedWidthTable } from "@/lib/parseFixedWidthTables";
 import StructuredDataViewer from "@/components/StructuredDataViewer";
 import CanonicalNameViewer from "@/components/CanonicalNameViewer";
 import { useDocumentContext } from "@/context/DocumentContext";
 
-type TabType = "text" | "tables" | "cn" | "qa";
+type TabType = "text" | "tables" | "cn" | "qa" | "st";
 
 const tabs: { id: TabType; label: string; icon: typeof FileText }[] = [
   { id: "text", label: "Raw Text", icon: FileText },
   { id: "tables", label: "Structured Data", icon: Table },
   { id: "cn", label: "CN", icon: Hash },
   { id: "qa", label: "QA", icon: Sparkles },
+  { id: "st", label: "ST", icon: Table },
 ];
 
 export default function Workspace() {
@@ -90,6 +92,8 @@ export default function Workspace() {
   const previousHighlightLineRef = useRef<number | null>(null);
   const qaHorizontalProgressRef = useRef<number | null>(null); // 0 (left) -> 1 (right)
   const qaLineScrollStateRef = useRef<{ line: number; baselineLeft: number } | null>(null);
+  const [stSelectedIndex, setStSelectedIndex] = useState<number>(0);
+  const stRowRefs = useRef<Map<number, HTMLTableRowElement>>(new Map());
   const [qaSelectedIndex, setQaSelectedIndex] = useState<number>(0);
   const [qaEditingId, setQaEditingId] = useState<string | null>(null);
   const [qaDraftKey, setQaDraftKey] = useState<string>("");
@@ -477,6 +481,30 @@ export default function Workspace() {
       })),
     [allHighlights]
   );
+
+  // ST tab: parse fixed-width tables from raw resultText for loss-run style PDFs.
+  const stTable: FixedWidthTable | null = useMemo(() => {
+    if (!resultText) return null;
+
+    const rawLines = resultText.split("\n").map((line, idx) => {
+      // Strip leading 0xNN: prefix if present
+      const match = line.match(/^0x[0-9A-Fa-f]+:\s?(.*)$/);
+      return {
+        index: idx,
+        text: match ? match[1] : line,
+      };
+    });
+
+    // Try simple loss-run parser first (single header style)
+    const simple = parseSimpleLossRunTable(rawLines);
+    if (simple && simple.rows.length > 0) return simple;
+
+    // Fallback to multi-header style
+    const multi = parseMultiHeaderLossRunTable(rawLines);
+    if (multi && multi.rows.length > 0) return multi;
+
+    return null;
+  }, [resultText]);
 
   // QA tab: build flat list of items ordered by first line number (PDF order)
   const qaItems = useMemo(() => {
@@ -927,15 +955,14 @@ export default function Workspace() {
           qaHorizontalProgressRef.current = 0;
         }
 
-        // If switching to a new line, reset progress to start from left
+        // If switching to a new line, reset progress state for the new line
         if (previousHighlightLineRef.current !== primaryLine) {
-          if (sameLineItems.length <= 1) {
-            qaHorizontalProgressRef.current = 0;
-          }
           previousHighlightLineRef.current = primaryLine;
+          qaLineScrollStateRef.current = null; // force baseline recompute
         }
       } else {
         qaHorizontalProgressRef.current = null;
+        qaLineScrollStateRef.current = null;
       }
 
       // Ensure selected row is visible in the QA panel
@@ -1120,6 +1147,24 @@ export default function Workspace() {
       qaContainerRef.current?.focus();
     });
   }, [activeTab, qaItems, qaSelectedIndex, highlightQAItem]);
+
+  // When switching to ST tab, auto-select and highlight the first row
+  useEffect(() => {
+    if (activeTab !== "st" || !stTable || !stTable.rows.length) return;
+
+    const initial = Math.min(stSelectedIndex, stTable.rows.length - 1);
+    setStSelectedIndex(initial);
+
+    const row = stTable.rows[initial];
+    if (row.lineIndices && row.lineIndices.length > 0) {
+      handleStructuredHighlight(row.lineIndices, true);
+    }
+
+    requestAnimationFrame(() => {
+      const el = stRowRefs.current.get(initial);
+      el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    });
+  }, [activeTab, stTable, stSelectedIndex, handleStructuredHighlight]);
 
   // Derive search-expanded accordions from search results (temporary, only when search is active)
   const searchExpandedAccordions = useMemo(() => {
@@ -1506,6 +1551,93 @@ export default function Workspace() {
                         </tr>
                       );
                     })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        );
+      case "st":
+        return (
+          <div
+            className="space-y-4 min-w-[720px] outline-none"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                e.preventDefault();
+                if (!stTable || !stTable.rows.length) return;
+                const delta = e.key === "ArrowDown" ? 1 : -1;
+                const next = stSelectedIndex + delta;
+                const clamped = Math.max(
+                  0,
+                  Math.min(next, stTable.rows.length - 1)
+                );
+                setStSelectedIndex(clamped);
+                const row = stTable.rows[clamped];
+                if (row.lineIndices && row.lineIndices.length > 0) {
+                  handleStructuredHighlight(row.lineIndices, true);
+                }
+                requestAnimationFrame(() => {
+                  const el = stRowRefs.current.get(clamped);
+                  el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+                });
+              }
+            }}
+          >
+            {!stTable && (
+              <div className="text-sm text-muted-foreground">
+                ST view is only available for fixed-width loss-run style
+                reports.
+              </div>
+            )}
+            {stTable && stTable.rows.length > 0 && (
+              <div className="rounded-lg border border-border/50 bg-muted/30 p-4 overflow-x-auto">
+                <table className="w-full text-sm border-collapse">
+                  <thead>
+                    <tr className="border-b border-border/30">
+                      {stTable.columns.map((col) => (
+                        <th
+                          key={col.name}
+                          className="text-left p-2 font-semibold text-muted-foreground whitespace-nowrap"
+                        >
+                          {col.name}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {stTable.rows.map((row, index) => (
+                      <tr
+                        key={row.id}
+                        ref={(el) => {
+                          const map = stRowRefs.current;
+                          if (el) {
+                            map.set(index, el);
+                          } else {
+                            map.delete(index);
+                          }
+                        }}
+                        className={cn(
+                          "border-b border-border/20 hover:bg-muted/50 cursor-pointer",
+                          index === stSelectedIndex && "bg-primary/5"
+                        )}
+                        onClick={() => {
+                          setStSelectedIndex(index);
+                          if (row.lineIndices && row.lineIndices.length > 0) {
+                            handleStructuredHighlight(row.lineIndices, true);
+                          }
+                        }}
+                      >
+                        {stTable.columns.map((col) => (
+                          <td
+                            key={col.name}
+                            className="p-2 align-top whitespace-pre-wrap"
+                          >
+                            {row.values[col.name] ?? ""}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
