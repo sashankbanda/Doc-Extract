@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { FileText, Table, Sparkles, Loader2, RotateCcw, Search, X, Hash, Edit2, Save, XCircle, Maximize2 } from "lucide-react";
+import { FileText, Table, Sparkles, Loader2, RotateCcw, Search, X, Hash, Edit2, Save, XCircle, Maximize2, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,12 +29,13 @@ import StructuredDataViewer from "@/components/StructuredDataViewer";
 import CanonicalNameViewer from "@/components/CanonicalNameViewer";
 import { useDocumentContext } from "@/context/DocumentContext";
 
-type TabType = "text" | "tables" | "cn";
+type TabType = "text" | "tables" | "cn" | "qa";
 
 const tabs: { id: TabType; label: string; icon: typeof FileText }[] = [
   { id: "text", label: "Raw Text", icon: FileText },
   { id: "tables", label: "Structured Data", icon: Table },
   { id: "cn", label: "CN", icon: Hash },
+  { id: "qa", label: "QA", icon: Sparkles },
 ];
 
 export default function Workspace() {
@@ -84,6 +85,17 @@ export default function Workspace() {
   const structuredDataViewerRef = useRef<HTMLDivElement>(null);
   const extractedTextPanelRef = useRef<HTMLDivElement>(null);
   const rightPaneRef = useRef<HTMLDivElement>(null);
+  const qaContainerRef = useRef<HTMLDivElement>(null);
+  const qaRowRefs = useRef<Map<number, HTMLTableRowElement>>(new Map());
+  const [qaSelectedIndex, setQaSelectedIndex] = useState<number>(0);
+  const [qaEditingId, setQaEditingId] = useState<string | null>(null);
+  const [qaDraftValue, setQaDraftValue] = useState<string>("");
+  const [qaSavingId, setQaSavingId] = useState<string | null>(null);
+  const [qaError, setQaError] = useState<string | null>(null);
+
+  const buildItemId = useCallback((item: StructuredItem) => {
+    return `${item.source_key}|${item.value}|${item.line_numbers.join(",")}`;
+  }, []);
 
   const handlePageDimensions = useCallback((pageNum: number, width: number, height: number) => {
     setPageDimensions(prev => {
@@ -429,7 +441,6 @@ export default function Workspace() {
           }
         }, 150);
         
-        setTimeout(() => setActiveBoundingBox(null), 3000);
       } catch (e: any) {
         // Check for 400 errors (invalid line index or invalid bbox)
         if (e.message && (e.message.includes("Invalid") || e.message.includes("no valid bounding box"))) {
@@ -461,6 +472,23 @@ export default function Workspace() {
       })),
     [allHighlights]
   );
+
+  // QA tab: build flat list of items ordered by first line number (PDF order)
+  const qaItems = useMemo(() => {
+    if (!structuredData || !structuredData.items) return [];
+
+    return structuredData.items
+      .map((item, index) => ({
+        item,
+        index,
+        itemId: buildItemId(item),
+        sortKey:
+          item.line_numbers && item.line_numbers.length > 0
+            ? Math.min(...item.line_numbers)
+            : Number.MAX_SAFE_INTEGER,
+      }))
+      .sort((a, b) => a.sortKey - b.sortKey);
+  }, [structuredData, buildItemId]);
 
   // Handle structure document with caching
   const handleStructureDocument = useCallback(async () => {
@@ -497,7 +525,7 @@ export default function Workspace() {
     }
   }, [whisperHash, dataCache, cacheData]);
 
-  // Edit mode handlers
+  // Edit mode handlers (used by Structured Data & CN views)
   const handleEditModeToggle = useCallback(() => {
     if (isEditMode) {
       // Cancel edit mode - discard changes
@@ -512,10 +540,7 @@ export default function Workspace() {
   const handleItemValueChange = useCallback((itemId: string, newValue: string) => {
     if (!structuredData || !structuredData.items) return;
     
-    const item = structuredData.items.find((it) => {
-      const id = `${it.source_key}|${it.value}|${it.line_numbers.join(',')}`;
-      return id === itemId;
-    });
+    const item = structuredData.items.find((it) => buildItemId(it) === itemId);
     
     if (!item) return;
     
@@ -536,7 +561,7 @@ export default function Workspace() {
     try {
       // Merge edited items with original items
       const updatedItems = structuredData.items.map((item) => {
-        const itemId = `${item.source_key}|${item.value}|${item.line_numbers.join(',')}`;
+        const itemId = buildItemId(item);
         const editedItem = editedItems.get(itemId);
         return editedItem || item;
       });
@@ -571,7 +596,7 @@ export default function Workspace() {
     if (!itemId) {
       // Fallback: create ID from item
       const structuredItem = item as StructuredItem;
-      itemId = `${structuredItem.source_key}|${structuredItem.value}|${structuredItem.line_numbers.join(',')}`;
+      itemId = buildItemId(structuredItem);
     }
     const editedItem = editedItems.get(itemId);
     return editedItem ? editedItem.value : item.value;
@@ -582,6 +607,45 @@ export default function Workspace() {
 
   // Mock data for tables (can be enhanced later)
   const mockTables: ExtractedTable[] = [];
+
+  // QA editing: save a single item's value inline
+  const handleQASave = useCallback(
+    async (itemId: string, newValue: string) => {
+      if (!whisperHash || !structuredData || !structuredData.items) return;
+
+      const index = structuredData.items.findIndex((it) => buildItemId(it) === itemId);
+      if (index === -1) return;
+
+      setQaSavingId(itemId);
+      setQaError(null);
+
+      try {
+        const updatedItems = structuredData.items.map((item, idx) =>
+          idx === index ? { ...item, value: newValue } : item
+        );
+
+        const response = await updateStructuredDocument(whisperHash, updatedItems);
+        const organized = organizeStructuredData(response.items || updatedItems);
+
+        setStructuredData(organized);
+
+        const cachedData = dataCache[whisperHash];
+        cacheData(whisperHash, {
+          ...cachedData,
+          structured: organized,
+        });
+
+        setQaEditingId(null);
+        setQaDraftValue("");
+      } catch (err: any) {
+        console.error("[Workspace] QA save error:", err);
+        setQaError(err.message || "Failed to save change");
+      } finally {
+        setQaSavingId(null);
+      }
+    },
+    [whisperHash, structuredData, buildItemId, dataCache, cacheData]
+  );
 
   // Highlight a specific line id (0-based) using existing highlight API
   // Returns the bounding box if successful, throws error if failed
@@ -706,12 +770,6 @@ export default function Workspace() {
         console.log(`[Workspace] Highlighted 1 line (full intensity)`);
       }
 
-      // Auto-clear highlights after 5 seconds
-      setTimeout(() => {
-        setActiveBoundingBox(null);
-        setSecondaryHighlights([]);
-      }, 5000);
-
       // Scroll to first highlight
       setTimeout(() => {
         const pageElement = document.getElementById(`page_${firstBoundingBox.page}`);
@@ -738,6 +796,29 @@ export default function Workspace() {
       }, 150);
     },
     [highlightLineById]
+  );
+
+  // QA helpers: select & highlight a QA row
+  const highlightQAItem = useCallback(
+    (qaIndex: number) => {
+      if (!qaItems || qaItems.length === 0) return;
+
+      const clampedIndex = Math.max(0, Math.min(qaIndex, qaItems.length - 1));
+      const qaItem = qaItems[clampedIndex];
+
+      setQaSelectedIndex(clampedIndex);
+
+      // Ensure selected row is visible in the QA panel
+      requestAnimationFrame(() => {
+        const row = qaRowRefs.current.get(clampedIndex);
+        row?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      });
+
+      if (qaItem.item.line_numbers && qaItem.item.line_numbers.length > 0) {
+        handleStructuredHighlight(qaItem.item.line_numbers, true);
+      }
+    },
+    [qaItems, handleStructuredHighlight]
   );
 
   // Build searchable index from raw text and structured data
@@ -896,6 +977,19 @@ export default function Workspace() {
       item.value.toLowerCase().includes(query)
     );
   }, [searchQuery, searchIndex]);
+
+  // When switching to QA tab, auto-focus the QA container and highlight the first row
+  useEffect(() => {
+    if (activeTab !== "qa") return;
+    if (!qaItems || qaItems.length === 0) return;
+
+    const initialIndex = Math.min(qaSelectedIndex, qaItems.length - 1);
+    highlightQAItem(initialIndex);
+
+    requestAnimationFrame(() => {
+      qaContainerRef.current?.focus();
+    });
+  }, [activeTab, qaItems, qaSelectedIndex, highlightQAItem]);
 
   // Derive search-expanded accordions from search results (temporary, only when search is active)
   const searchExpandedAccordions = useMemo(() => {
@@ -1092,6 +1186,157 @@ export default function Workspace() {
             )}
           </div>
         );
+      case "qa":
+        return (
+          <div
+            ref={qaContainerRef}
+            tabIndex={0}
+            className="space-y-4 min-w-[720px] outline-none"
+            onKeyDown={(e) => {
+              if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                e.preventDefault();
+                if (!qaItems || qaItems.length === 0) return;
+                const delta = e.key === "ArrowDown" ? 1 : -1;
+                highlightQAItem(qaSelectedIndex + delta);
+              }
+            }}
+          >
+            {!structuredData && !structureError && (
+              <div className="text-sm text-muted-foreground">
+                Run "Analyze with AI" to view QA data.
+              </div>
+            )}
+            {structureError && (
+              <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4">
+                <div className="text-sm font-semibold text-destructive mb-2">Error</div>
+                <p className="text-sm text-destructive">{structureError}</p>
+                <Button
+                  onClick={handleStructureDocument}
+                  variant="outline"
+                  size="sm"
+                  className="mt-2"
+                >
+                  Retry
+                </Button>
+              </div>
+            )}
+            {qaError && (
+              <div className="rounded-lg border border-destructive/50 bg-destructive/5 p-2 text-sm text-destructive">
+                {qaError}
+              </div>
+            )}
+            {qaItems && qaItems.length > 0 && (
+              <div className="rounded-lg border border-border/50 bg-muted/30 p-4 overflow-x-auto">
+                <table className="w-full text-sm border-collapse">
+                  <thead>
+                    <tr className="border-b border-border/30">
+                      <th className="text-left p-2 font-semibold text-muted-foreground">
+                        Source Key
+                      </th>
+                      <th className="text-left p-2 font-semibold text-muted-foreground">
+                        Value
+                      </th>
+                      <th className="w-24 p-2" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {qaItems.map(({ item, itemId }, index) => {
+                      const isSelected = index === qaSelectedIndex;
+                      const isEditing = qaEditingId === itemId;
+                      const displayValue = item.value || "(no value)";
+
+                      return (
+                        <tr
+                          key={itemId + index}
+                          ref={(el) => {
+                            const map = qaRowRefs.current;
+                            if (el) {
+                              map.set(index, el);
+                            } else {
+                              map.delete(index);
+                            }
+                          }}
+                          className={cn(
+                            "border-b border-border/20 hover:bg-muted/50 cursor-pointer",
+                            isSelected && "bg-primary/5"
+                          )}
+                          onClick={() => highlightQAItem(index)}
+                        >
+                          <td className="p-2 text-muted-foreground whitespace-nowrap">
+                            {item.source_key || "(no key)"}
+                          </td>
+                          <td className="p-2">
+                            {isEditing ? (
+                              <Input
+                                value={qaDraftValue}
+                                onChange={(e) => setQaDraftValue(e.target.value)}
+                                className="text-sm"
+                                autoFocus
+                              />
+                            ) : (
+                              <span className="break-words">
+                                {displayValue}
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-2 text-right whitespace-nowrap">
+                            {isEditing ? (
+                              <div className="flex items-center justify-end gap-1">
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-7 w-7 text-green-500 hover:text-green-600"
+                                  disabled={qaSavingId === itemId}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleQASave(itemId, qaDraftValue);
+                                  }}
+                                  title="Save"
+                                >
+                                  <Check className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-7 w-7 text-destructive hover:text-destructive/90"
+                                  disabled={qaSavingId === itemId}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setQaEditingId(null);
+                                    setQaDraftValue("");
+                                    setQaError(null);
+                                  }}
+                                  title="Cancel"
+                                >
+                                  <X className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            ) : (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setQaEditingId(itemId);
+                                  setQaDraftValue(displayValue);
+                                  setQaError(null);
+                                }}
+                                title="Edit row"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </Button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        );
     }
   };
 
@@ -1239,7 +1484,7 @@ export default function Workspace() {
                 >
                   <Maximize2 className="w-4 h-4" />
                 </Button>
-                {structuredData && structuredData.items && structuredData.items.length > 0 && (
+                {structuredData && structuredData.items && structuredData.items.length > 0 && activeTab !== "qa" && (
                   <>
                     {!isEditMode ? (
                       <Button
