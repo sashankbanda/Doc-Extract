@@ -87,6 +87,8 @@ export default function Workspace() {
   const rightPaneRef = useRef<HTMLDivElement>(null);
   const qaContainerRef = useRef<HTMLDivElement>(null);
   const qaRowRefs = useRef<Map<number, HTMLTableRowElement>>(new Map());
+  const previousHighlightLineRef = useRef<number | null>(null);
+  const qaHorizontalProgressRef = useRef<number | null>(null); // 0 (left) -> 1 (right)
   const [qaSelectedIndex, setQaSelectedIndex] = useState<number>(0);
   const [qaEditingId, setQaEditingId] = useState<string | null>(null);
   const [qaDraftKey, setQaDraftKey] = useState<string>("");
@@ -831,10 +833,22 @@ export default function Workspace() {
             const canvasOffsetY = canvasRect ? canvasRect.top - pageRect.top : 0;
             const pageTop = pageRect.top - containerRect.top + scrollContainer.scrollTop;
             const targetScrollTop = pageTop + canvasOffsetY + firstBoundingBox.y - (containerRect.height / 2);
-            
+
+            // Determine desired horizontal scroll position
+            let targetScrollLeft = scrollContainer.scrollLeft;
+
+            // If QA navigation is active, pan horizontally based on progress (0 = left, 1 = right)
+            if (qaHorizontalProgressRef.current != null) {
+              const maxScrollLeft = Math.max(
+                0,
+                scrollContainer.scrollWidth - scrollContainer.clientWidth
+              );
+              targetScrollLeft = maxScrollLeft * qaHorizontalProgressRef.current;
+            }
+
             scrollContainer.scrollTo({
               top: Math.max(0, targetScrollTop),
-              left: scrollContainer.scrollLeft,
+              left: targetScrollLeft,
               behavior: 'smooth'
             });
           } else {
@@ -855,6 +869,44 @@ export default function Workspace() {
       const qaItem = qaItems[clampedIndex];
 
       setQaSelectedIndex(clampedIndex);
+
+      // Determine primary line for this QA row (first line number)
+      const lineNumbers = qaItem.item.line_numbers || [];
+      const primaryLine =
+        lineNumbers.length > 0 ? Math.min(...lineNumbers) : null;
+
+      if (primaryLine !== null) {
+        // Find all QA items that share this primary line
+        const sameLineItems = qaItems.filter(({ item }) => {
+          const lns = item.line_numbers || [];
+          if (!lns.length) return false;
+          return Math.min(...lns) === primaryLine;
+        });
+
+        const indexInSameLine = sameLineItems.findIndex(
+          ({ item }) => item === qaItem.item
+        );
+
+        if (sameLineItems.length > 1 && indexInSameLine >= 0) {
+          // Progress from 0 (first item on that line) to 1 (last item)
+          const progress =
+            indexInSameLine / (sameLineItems.length - 1 || 1);
+          qaHorizontalProgressRef.current = progress;
+        } else {
+          // Single item for this line -> keep at left
+          qaHorizontalProgressRef.current = 0;
+        }
+
+        // If switching to a new line, reset progress to start from left
+        if (previousHighlightLineRef.current !== primaryLine) {
+          if (sameLineItems.length <= 1) {
+            qaHorizontalProgressRef.current = 0;
+          }
+          previousHighlightLineRef.current = primaryLine;
+        }
+      } else {
+        qaHorizontalProgressRef.current = null;
+      }
 
       // Ensure selected row is visible in the QA panel
       requestAnimationFrame(() => {
