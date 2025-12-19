@@ -2,15 +2,15 @@ import CanonicalNameViewer from "@/components/CanonicalNameViewer";
 import DocumentViewer, { guessFileType } from "@/components/DocumentViewer";
 import StructuredDataViewer from "@/components/StructuredDataViewer";
 import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-    AlertDialogTrigger,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -115,12 +115,26 @@ export default function Workspace() {
            if (resp && resp.rows && resp.rows.length > 0) {
               const rows = resp.rows;
               // Determine columns from first row (excluding internal fields)
+              // Determine columns from first row (excluding internal fields)
               const firstRow = rows[0];
               const internalFields = ["line_numbers", "semantic_type", "window", "claim_line"];
-              const columns = Object.keys(firstRow).filter(k => !internalFields.includes(k) && typeof firstRow[k] === 'object');
+              const allColumns = Object.keys(firstRow).filter(k => !internalFields.includes(k) && typeof firstRow[k] === 'object');
+              
+              // Filter out columns that are completely empty
+              const activeColumns = allColumns.filter(col => {
+                  return rows.some(r => {
+                      const val = r[col]?.value;
+                      return val && val.toString().trim().length > 0;
+                  });
+              });
+
+              // Also ensure we always keep 'claimNumber' if it exists, just in case
+              if (allColumns.includes("claimNumber") && !activeColumns.includes("claimNumber")) {
+                  activeColumns.unshift("claimNumber");
+              }
               
               const extractedRows = rows.map((r) => {
-                  return columns.map((col) => {
+                  return activeColumns.map((col) => {
                       const cellData = r[col];
                       return {
                           value: cellData?.value || "",
@@ -136,8 +150,7 @@ export default function Workspace() {
               // Create one table
               const table: ExtractedTable = {
                   id: "st-table-1",
-                  title: "Structured Data",
-                  headers: columns,
+                  headers: activeColumns,
                   rows: extractedRows,
                   boundingBox: { x:0, y:0, width:0, height:0, page: 1 }
               };

@@ -335,6 +335,47 @@ def build_st_rows(items: List[Dict[str, Any]], debug: bool = False) -> Tuple[Lis
                 "semantic_type": item.get("semantic_type"),
             })
 
+    # Filter out empty/sparse rows
+    final_rows = []
+    skipped_items = []
+    
+    for row in rows:
+        populated_fields = 0
+        has_suspicious_claim_number = False
+        claim_val = ""
+        
+        for field_name, field_data in row.items():
+            if isinstance(field_data, dict) and field_data.get("value") and str(field_data.get("value")).strip():
+                populated_fields += 1
+                if field_name == "claimNumber":
+                    claim_val = str(field_data.get("value")).strip()
+                    # Check for suspicious claim numbers (e.g., single digits like "1", "4")
+                    if claim_val.isdigit() and len(claim_val) < 3:
+                        has_suspicious_claim_number = True
+        
+        # Filter logic:
+        # 1. Drop if 0 populated fields
+        # 2. Drop if only 1 populated field and that field is a suspicious claim number
+        # 3. Drop if only 1 populated field and it's NOT claimNumber (start strict, maybe unexpected) - actually, if it's just a date or amount, it's likely noise?
+        # Let's say: keep if populated_fields >= 2 OR (populated_fields == 1 and NOT suspicious_claim_number)
+        
+        should_keep = False
+        if populated_fields >= 2:
+            should_keep = True
+        elif populated_fields == 1 and not has_suspicious_claim_number:
+            # If the single field is claimNumber, ensure it's not suspicious (already handled by not has_suspicious...)
+            # But if it's just "claimNumber" = "123456", keep it.
+            # If it's just "totalPaid" = "500", might be floating? Keep for now?
+            should_keep = True
+            
+        if should_keep:
+            final_rows.append(row)
+        else:
+            # Maybe track skipped for debug?
+            pass
+
+    rows = final_rows
+
     # Run validation
     validation_issues = validate_st_rows(rows, items)
     debug_info["validation_issues"].extend(validation_issues)
