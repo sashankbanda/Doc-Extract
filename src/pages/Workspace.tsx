@@ -1551,13 +1551,13 @@ export default function Workspace() {
                 <table className="w-full text-sm border-collapse">
                   <thead>
                     <tr className="border-b border-border/30">
-                      <th className="text-left p-2 font-semibold text-muted-foreground">
+                      <th className="text-left p-2 font-semibold text-muted-foreground w-[30%]">
                         Source Key
                       </th>
                       <th className="text-left p-2 font-semibold text-muted-foreground">
                         Value
                       </th>
-                      <th className="w-24 p-2" />
+                      <th className="w-[60px] p-2" />
                     </tr>
                   </thead>
                   <tbody>
