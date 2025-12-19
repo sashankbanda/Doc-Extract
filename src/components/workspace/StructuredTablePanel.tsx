@@ -1,12 +1,12 @@
+import { cn } from "@/lib/utils";
+import { BoundingBox, ExtractedTable } from "@/types/document";
 import { motion } from "framer-motion";
 import { Table } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { ExtractedTable, BoundingBox } from "@/types/document";
 
 interface StructuredTablePanelProps {
   tables: ExtractedTable[];
   onTableHover: (boundingBox: BoundingBox | null) => void;
-  onCellClick: (boundingBox: BoundingBox) => void;
+  onCellClick: (cell: any) => void;
 }
 
 export function StructuredTablePanel({
@@ -60,9 +60,7 @@ export function StructuredTablePanel({
                           "px-4 py-3 text-foreground whitespace-nowrap cursor-pointer",
                           "hover:bg-primary/10 transition-colors"
                         )}
-                        onClick={() =>
-                          cell.boundingBox && onCellClick(cell.boundingBox)
-                        }
+                        onClick={() => onCellClick(cell)}
                       >
                         {cell.value}
                       </td>

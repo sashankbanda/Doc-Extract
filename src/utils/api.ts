@@ -42,3 +42,16 @@ export const apiPost = async <T>(path: string, body: FormData | object): Promise
     }
     return res.json();
 };
+
+export interface StRow {
+    [key: string]: any;
+}
+
+export interface StResponse {
+    whisper_hash: string;
+    rows: StRow[];
+}
+
+export const getStRows = async (whisperHash: string): Promise<StResponse> => {
+    return apiGet<StResponse>(`/structure/${whisperHash}/st`);
+};

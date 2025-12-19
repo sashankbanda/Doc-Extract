@@ -60,7 +60,9 @@ CANONICAL_MAPPINGS: Dict[str, List[str]] = {
     ],
     "claimNumber": [
         "Claim No", "Claim", "Claim #", "Claim Reference #", "Claim Num", 
-        "Claim Master Reference", "Claim occurrence", "Case #", "Casefile"
+        "Claim Master Reference", "Claim occurrence", "Case #", "Casefile",
+        "Claim Number", "Claim Nbr", "File Number", "File #", "Loss Number", 
+        "Reference Number", "Matter Number", "Our Reference"
     ],
     "claimant": [
         "Claimant", "Claimant Name", "Claimants", "Injured Employee", "Worker's Name", 

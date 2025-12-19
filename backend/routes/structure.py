@@ -133,6 +133,15 @@ async def update_structured_document(whisper_hash: str, data: StructuredDataUpda
     return output_payload
 
 
+@router.get("/structure/{whisper_hash}/st")
+async def get_st_rows(whisper_hash: str):
+    """Retrieve ST rows (table data)."""
+    st_data = file_store.get_json_output(whisper_hash, suffix="_st")
+    if st_data:
+        return st_data
+    raise HTTPException(status_code=404, detail="ST data not found")
+
+
 @router.get("/structure/{whisper_hash}/debug")
 async def get_st_debug_info(whisper_hash: str):
     """

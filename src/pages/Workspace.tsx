@@ -1,34 +1,35 @@
-import { useState, useCallback, useEffect, useMemo, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { useSearchParams, useNavigate } from "react-router-dom";
-import { FileText, Table, Sparkles, Loader2, RotateCcw, Search, X, Hash, Edit2, Save, XCircle, Maximize2, Check, Trash2 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import CanonicalNameViewer from "@/components/CanonicalNameViewer";
+import DocumentViewer, { guessFileType } from "@/components/DocumentViewer";
+import StructuredDataViewer from "@/components/StructuredDataViewer";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-import { TwoPaneLayout } from "@/components/workspace/TwoPaneLayout";
+import { ExtractedTextPanel } from "@/components/workspace/ExtractedTextPanel";
 import { FileSelectorDropdown } from "@/components/workspace/FileSelectorDropdown";
 import { PDFViewerWrapper } from "@/components/workspace/PDFViewerWrapper";
-import { ExtractedTextPanel } from "@/components/workspace/ExtractedTextPanel";
 import { StructuredTablePanel } from "@/components/workspace/StructuredTablePanel";
-import { BoundingBox, LayoutText, ExtractedTable } from "@/types/document";
-import { apiRetrieve, apiHighlight, API_BASE, structureDocument, getStructuredDocument, updateStructuredDocument, StructuredDataResponse, OrganizedStructuredData, StructuredItem } from "@/lib/api";
-import { organizeStructuredData } from "@/lib/organizeStructuredData";
-import DocumentViewer, { guessFileType } from "@/components/DocumentViewer";
-import { parseSimpleLossRunTable, parseMultiHeaderLossRunTable, ST_CANONICAL_FIELDS, FixedWidthTable } from "@/lib/parseFixedWidthTables";
-import StructuredDataViewer from "@/components/StructuredDataViewer";
-import CanonicalNameViewer from "@/components/CanonicalNameViewer";
+import { TwoPaneLayout } from "@/components/workspace/TwoPaneLayout";
 import { useDocumentContext } from "@/context/DocumentContext";
+import { API_BASE, apiHighlight, apiRetrieve, getStructuredDocument, OrganizedStructuredData, StructuredItem, structureDocument, updateStructuredDocument } from "@/lib/api";
+import { organizeStructuredData } from "@/lib/organizeStructuredData";
+import { FixedWidthTable, parseMultiHeaderLossRunTable, parseSimpleLossRunTable } from "@/lib/parseFixedWidthTables";
+import { cn } from "@/lib/utils";
+import { BoundingBox, ExtractedTable, LayoutText } from "@/types/document";
+import { getStRows } from "@/utils/api";
+import { AnimatePresence, motion } from "framer-motion";
+import { Check, Edit2, FileText, Hash, Loader2, Maximize2, RotateCcw, Save, Search, Sparkles, Table, Trash2, X, XCircle } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 type TabType = "text" | "tables" | "cn" | "qa" | "st";
 
@@ -101,6 +102,56 @@ export default function Workspace() {
   const [qaSavingId, setQaSavingId] = useState<string | null>(null);
   const [qaError, setQaError] = useState<string | null>(null);
   const [qaDeletingId, setQaDeletingId] = useState<string | null>(null);
+
+  // ST tab state
+  const [stRows, setStRows] = useState<ExtractedTable[] | null>(null);
+  const [stLoading, setStLoading] = useState<boolean>(false);
+
+  const handleFetchStRows = useCallback(async () => {
+       if (!whisperHash) return;
+       setStLoading(true);
+       try {
+           const resp = await getStRows(whisperHash);
+           if (resp && resp.rows && resp.rows.length > 0) {
+              const rows = resp.rows;
+              // Determine columns from first row (excluding internal fields)
+              const firstRow = rows[0];
+              const internalFields = ["line_numbers", "semantic_type", "window", "claim_line"];
+              const columns = Object.keys(firstRow).filter(k => !internalFields.includes(k) && typeof firstRow[k] === 'object');
+              
+              const extractedRows = rows.map((r) => {
+                  return columns.map((col) => {
+                      const cellData = r[col];
+                      return {
+                          value: cellData?.value || "",
+                          boundingBox: (cellData?.line_numbers && cellData.line_numbers.length > 0) ? {
+                            // Dummy bbox to enable click
+                            x: 0, y: 0, width: 0, height: 0, page: 1,
+                          } : undefined,
+                          lineIndices: cellData?.line_numbers || []
+                      };
+                  });
+              });
+
+              // Create one table
+              const table: ExtractedTable = {
+                  id: "st-table-1",
+                  title: "Structured Data",
+                  headers: columns,
+                  rows: extractedRows,
+                  boundingBox: { x:0, y:0, width:0, height:0, page: 1 }
+              };
+              
+              setStRows([table]);
+           } else {
+               setStRows([]);
+           }
+       } catch (e) {
+           console.error("Failed to fetch ST rows", e);
+       } finally {
+           setStLoading(false);
+       }
+  }, [whisperHash]);
 
   const buildItemId = useCallback((item: StructuredItem) => {
     return `${item.source_key}|${item.value}|${item.line_numbers.join(",")}`;
@@ -1558,94 +1609,51 @@ export default function Workspace() {
           </div>
         );
       case "st":
+        // Use StructuredTablePanel with data from backend
         return (
-          <div
-            className="space-y-4 min-w-[720px] outline-none"
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-                e.preventDefault();
-                if (!stTable || !stTable.rows.length) return;
-                const delta = e.key === "ArrowDown" ? 1 : -1;
-                const next = stSelectedIndex + delta;
-                const clamped = Math.max(
-                  0,
-                  Math.min(next, stTable.rows.length - 1)
-                );
-                setStSelectedIndex(clamped);
-                const row = stTable.rows[clamped];
-                if (row.lineIndices && row.lineIndices.length > 0) {
-                  handleStructuredHighlight(row.lineIndices, true);
-                }
-                requestAnimationFrame(() => {
-                  const el = stRowRefs.current.get(clamped);
-                  el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-                });
-              }
-            }}
-          >
-            {!stTable && (
-              <div className="text-sm text-muted-foreground">
-                ST view is only available for fixed-width loss-run style
-                reports.
-              </div>
-            )}
-            {stTable && stTable.rows.length > 0 && (
-              <div className="rounded-lg border border-border/50 bg-muted/30 p-4 overflow-x-auto">
-                <table className="w-full text-sm border-collapse">
-                  <thead>
-                    <tr className="border-b border-border/30">
-                      {stTable.columns.map((col) => (
-                        <th
-                          key={col.name}
-                          className="text-left p-2 font-semibold text-muted-foreground whitespace-nowrap"
-                        >
-                          {col.name}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {stTable.rows.map((row, index) => (
-                      <tr
-                        key={row.id}
-                        ref={(el) => {
-                          const map = stRowRefs.current;
-                          if (el) {
-                            map.set(index, el);
-                          } else {
-                            map.delete(index);
-                          }
-                        }}
-                        className={cn(
-                          "border-b border-border/20 hover:bg-muted/50 cursor-pointer",
-                          index === stSelectedIndex && "bg-primary/5"
-                        )}
-                        onClick={() => {
-                          setStSelectedIndex(index);
-                          if (row.lineIndices && row.lineIndices.length > 0) {
-                            handleStructuredHighlight(row.lineIndices, true);
-                          }
-                        }}
-                      >
-                        {stTable.columns.map((col) => (
-                          <td
-                            key={col.name}
-                            className="p-2 align-top whitespace-pre-wrap"
-                          >
-                            {row.values[col.name] ?? ""}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+           <div className="space-y-4 min-w-[720px] outline-none"> 
+              {!stRows && !stLoading && (
+                <div className="flex flex-col items-center justify-center p-8 text-muted-foreground bg-muted/20 rounded-xl border border-border/50">
+                  <Table className="w-12 h-12 mb-4 opacity-20" />
+                  <p className="mb-4">No structured table data available.</p>
+                  <Button 
+                    variant="outline" 
+                    onClick={handleFetchStRows}
+                    disabled={stLoading}
+                  >
+                     <RotateCcw className="w-4 h-4 mr-2" />
+                     Load Tables
+                  </Button>
+                </div>
+              )}
+              
+              {stLoading && (
+                 <div className="flex items-center justify-center p-12">
+                   <Loader2 className="w-8 h-8 animate-spin text-primary/50" />
+                 </div>
+              )}
+
+              {stRows && stRows.length > 0 && (
+                <StructuredTablePanel
+                  tables={stRows}
+                  onTableHover={(bbox) => handleStructuredHighlight(bbox ? [bbox.page + 1] : [], false)} // Approximate hover highlight
+                  onCellClick={(bbox) => {
+                      if (bbox) {
+                           // Highlight and scroll
+                           // Note: ST rows might need to carry bounding box info
+                           // Currently st_table_builder.py puts line_numbers in cells
+                           // structuredTablePanel expects ExtractedTable[]
+                      }
+                  }}
+                />
+              )}
+           </div>
         );
+
     }
   };
+
+
 
   if (!whisperHash) {
     return (

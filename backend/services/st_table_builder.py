@@ -104,8 +104,21 @@ def _is_claim_number_item(item: Dict[str, Any]) -> bool:
     semantic = (item.get("semantic_type") or "").strip()
     if semantic.startswith("claim.number"):
         return True
+    if semantic.startswith("claim.number"):
+        return True
+    
     normalized = canonical.lower()
-    return normalized == "claimNumber".lower() or normalized == "claimnumber"
+    # Check for exact matches on common variants
+    if normalized in ["claimnumber", "claim number", "claim #", "claim no", "claim_number"]:
+        return True
+        
+    # Check for strong partial matches if the value looks like a claim number (alphanumeric, not too long)
+    # This helps catch cases where the model extracted "Claim" as the key for the number
+    val = str(item.get("value", "")).strip()
+    if normalized == "claim" and len(val) > 3 and any(c.isdigit() for c in val):
+        return True
+
+    return False
 
 
 def _first_line(item: Dict[str, Any]) -> int:
