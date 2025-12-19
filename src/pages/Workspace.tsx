@@ -1637,12 +1637,9 @@ export default function Workspace() {
                 <StructuredTablePanel
                   tables={stRows}
                   onTableHover={(bbox) => handleStructuredHighlight(bbox ? [bbox.page + 1] : [], false)} // Approximate hover highlight
-                  onCellClick={(bbox) => {
-                      if (bbox) {
-                           // Highlight and scroll
-                           // Note: ST rows might need to carry bounding box info
-                           // Currently st_table_builder.py puts line_numbers in cells
-                           // structuredTablePanel expects ExtractedTable[]
+                  onCellClick={(cell) => {
+                      if (cell && cell.lineIndices && cell.lineIndices.length > 0) {
+                           handleStructuredHighlight(cell.lineIndices, true);
                       }
                   }}
                 />
