@@ -1044,11 +1044,12 @@ export default function Workspace() {
 
   // Build searchable index from raw text and structured data
   type SearchResult = {
-    type: 'text' | 'structured';
+    type: 'text' | 'structured' | 'st' | 'qa';
     value: string;
     lineNumbers: number[];
     path?: string; // For structured data: section/claim/category/field
     elementId?: string; // For scrolling to element
+    tab?: TabType;
   };
 
   const searchIndex = useMemo((): SearchResult[] => {
@@ -1069,7 +1070,7 @@ export default function Workspace() {
       });
     }
 
-    // Index structured data
+    // Index structured data (Accordion View)
     if (structuredData && structuredData.sections) {
       const { sections } = structuredData;
 
@@ -1110,6 +1111,7 @@ export default function Workspace() {
                   lineNumbers: item.line_numbers || [],
                   path: `Claims/Claim ${claimNumber}/${category}/${key}`,
                   elementId: `claim-${claimNumber}-${key}`,
+                  tab: 'tables'
                 });
               }
             });
@@ -1128,6 +1130,7 @@ export default function Workspace() {
                 lineNumbers: item.line_numbers || [],
                 path: `Policy Info/${key}`,
                 elementId: `policy-info-${key}`,
+                tab: 'tables'
               });
             }
           });
@@ -1145,6 +1148,7 @@ export default function Workspace() {
                 lineNumbers: item.line_numbers || [],
                 path: `Summary/${key}`,
                 elementId: `summary-${key}`,
+                tab: 'tables'
               });
             }
           });
@@ -1162,6 +1166,7 @@ export default function Workspace() {
                 lineNumbers: item.line_numbers || [],
                 path: `Report Info/${key}`,
                 elementId: `report-info-${key}`,
+                tab: 'tables'
               });
             }
           });
@@ -1179,6 +1184,7 @@ export default function Workspace() {
                 lineNumbers: item.line_numbers || [],
                 path: `Other/${key}`,
                 elementId: `other-${key}`,
+                tab: 'tables'
               });
             }
           });
@@ -1186,8 +1192,51 @@ export default function Workspace() {
       }
     }
 
+    // Index QA Items
+    if (qaItems && qaItems.length > 0) {
+      qaItems.forEach(({ item, index }) => {
+        if (item.value && item.value.trim()) {
+          searchIndexArray.push({
+            type: 'qa',
+            value: item.value,
+            lineNumbers: item.line_numbers || [],
+            elementId: `qa-row-${index}`,
+            tab: 'qa'
+          });
+        }
+        if (item.source_key && item.source_key.trim()) {
+           searchIndexArray.push({
+            type: 'qa',
+            value: item.source_key,
+            lineNumbers: item.line_numbers || [],
+            elementId: `qa-row-${index}`,
+            tab: 'qa'
+          });
+        }
+      });
+    }
+
+    // Index ST Rows
+    if (stRows && stRows.length > 0) {
+      stRows.forEach((table) => {
+         table.rows.forEach((row, rowIndex) => {
+             row.forEach((cell, cellIndex) => {
+                 if (cell.value && cell.value.trim()) {
+                     searchIndexArray.push({
+                         type: 'st',
+                         value: cell.value,
+                         lineNumbers: cell.lineIndices || [],
+                         elementId: `st-cell-${rowIndex}-${cellIndex}`,
+                         tab: 'st'
+                     });
+                 }
+             });
+         });
+      });
+    }
+
     return searchIndexArray;
-  }, [layoutTextItems, structuredData, lineMetadata]);
+  }, [layoutTextItems, structuredData, lineMetadata, qaItems, stRows]);
 
   // Search functionality
   const searchResults = useMemo(() => {
@@ -1275,69 +1324,102 @@ export default function Workspace() {
     return userExpandedAccordions;
   }, [userExpandedAccordions, searchExpandedAccordions, searchQuery]);
 
-  // Handle search - when user types, auto-navigate to first result
+  // Handle search - scroll to first result in ACTIVE tab
   useEffect(() => {
     if (!searchQuery.trim() || searchResults.length === 0) return;
     
-    const firstResult = searchResults[0];
+    // Find the first result that matches the ACTIVE tab
+    const activeTabResult = searchResults.find(r => {
+        if (activeTab === 'text') return r.type === 'text';
+        if (activeTab === 'tables') return r.type === 'structured';
+        if (activeTab === 'qa') return r.type === 'qa';
+        if (activeTab === 'st') return r.type === 'st';
+        return false;
+    });
+
+    // If no result in current tab, maybe fallback to first result (and let auto-switch handle it)?
+    // But user asks for "when switch between tabs... automatically show".
+    // So if I'm in QA, show QA result. If I switch to ST, show ST result (if any).
     
-    // Scroll to element after accordions expand
-    if (firstResult.type === 'structured') {
-      setTimeout(() => {
-        if (firstResult.elementId && structuredDataViewerRef.current) {
-          const element = document.querySelector(`[data-search-id="${firstResult.elementId}"]`);
-          if (element) {
-            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const resultToScroll = activeTabResult || searchResults[0];
+
+    // Scroll logic
+    if (resultToScroll) {
+       // Only scroll if the result is actually visible in the current tab
+       // Or if we need to switch tabs (handled by auto-switch effect below)
+       
+       const isVisibleInCurrentTab = 
+          (activeTab === 'text' && resultToScroll.type === 'text') ||
+          (activeTab === 'tables' && resultToScroll.type === 'structured') ||
+          (activeTab === 'qa' && resultToScroll.type === 'qa') ||
+          (activeTab === 'st' && resultToScroll.type === 'st');
+
+       if (isVisibleInCurrentTab) {
+          setTimeout(() => {
+              if (resultToScroll.elementId) {
+                  let element = document.getElementById(resultToScroll.elementId);
+                  
+                  // Fallback for data attributes if ID not found directly
+                  if (!element) {
+                      element = document.querySelector(`[data-search-id="${resultToScroll.elementId}"]`);
+                  }
+                  
+                  // Specific container refs check
+                  if (!element && activeTab === 'qa' && qaContainerRef.current) {
+                      // QA rows are looked up by ID `qa-row-X` which we added
+                      element = document.getElementById(resultToScroll.elementId);
+                  }
+                  
+                  if (element) {
+                      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      // Add temporary highlight class
+                      element.classList.add('bg-yellow-500/20');
+                      setTimeout(() => element?.classList.remove('bg-yellow-500/20'), 2000);
+                      
+                      // Simulate click or trigger highlight actions
+                      if (activeTab === 'qa' && resultToScroll.type === 'qa') {
+                         // Find index from ID "qa-row-X"
+                         const match = resultToScroll.elementId.match(/qa-row-(\d+)/);
+                         if (match) {
+                             const idx = parseInt(match[1]);
+                             highlightQAItem(idx);
+                         }
+                      }
+                  }
+              }
+          }, 300); // 300ms delay to allow tab render
+          
+          // PDF Highlight
+          if (resultToScroll.lineNumbers && resultToScroll.lineNumbers.length > 0) {
+              handleStructuredHighlight(resultToScroll.lineNumbers, true);
           }
-        }
-      }, 300);
-      
-      // Highlight in PDF
-      if (firstResult.lineNumbers && firstResult.lineNumbers.length > 0) {
-        handleStructuredHighlight(firstResult.lineNumbers, true);
-      }
-    } else if (firstResult.type === 'text') {
-      // Scroll to line in raw text
-      setTimeout(() => {
-        if (firstResult.elementId && extractedTextPanelRef.current) {
-          const element = document.getElementById(firstResult.elementId);
-          if (element) {
-            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          }
-        }
-      }, 100);
-      
-      // Highlight in PDF
-      if (firstResult.lineNumbers && firstResult.lineNumbers.length > 0) {
-        const lineIndex = firstResult.lineNumbers[0];
-        if (lineMetadata && lineMetadata[lineIndex]) {
-          highlightLineById(lineIndex)
-            .then(bbox => {
-              setActiveBoundingBox(bbox);
-              setTimeout(() => setActiveBoundingBox(null), 5000);
-            })
-            .catch(e => {
-              console.warn("[Workspace] Failed to highlight line:", e);
-            });
-        }
-      }
+       }
     }
-  }, [searchQuery, searchResults, handleStructuredHighlight, highlightLineById, lineMetadata]);
+  }, [searchQuery, searchResults, activeTab, handleStructuredHighlight, highlightQAItem]);
 
   // Auto-switch tab based on search results
   useEffect(() => {
     if (!searchQuery.trim() || searchResults.length === 0) return;
     
+    // Determine the best tab to switch to based on results
+    // Priority: ST > Tables > QA > Text (if multiple matches)
+    const hasSt = searchResults.some(r => r.type === 'st');
     const hasStructured = searchResults.some(r => r.type === 'structured');
+    const hasQa = searchResults.some(r => r.type === 'qa');
     const hasText = searchResults.some(r => r.type === 'text');
     
-    if (hasStructured && !hasText) {
-      setActiveTab('tables');
-    } else if (hasText && !hasStructured) {
-      setActiveTab('text');
-    } else if (hasStructured && hasText) {
-      // If both exist, prefer structured data
-      setActiveTab('tables');
+    // Only switch if current tab has NO results
+    const currentTabHasResults = 
+        (activeTab === 'st' && hasSt) ||
+        (activeTab === 'tables' && hasStructured) ||
+        (activeTab === 'qa' && hasQa) ||
+        (activeTab === 'text' && hasText);
+        
+    if (!currentTabHasResults) {
+        if (hasSt) setActiveTab('st');
+        else if (hasStructured) setActiveTab('tables');
+        else if (hasQa) setActiveTab('qa');
+        else if (hasText) setActiveTab('text');
     }
   }, [searchQuery, searchResults]);
 
@@ -1487,6 +1569,7 @@ export default function Workspace() {
                       return (
                         <tr
                           key={itemId + index}
+                          id={`qa-row-${index}`}
                           ref={(el) => {
                             const map = qaRowRefs.current;
                             if (el) {

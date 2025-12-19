@@ -51,11 +51,13 @@ export function StructuredTablePanel({
                 {table.rows.map((row, rowIndex) => (
                   <tr
                     key={rowIndex}
+                    id={`st-row-${rowIndex}`}
                     className="border-t border-border/30 hover:bg-muted/20 transition-colors"
                   >
                     {row.map((cell, cellIndex) => (
                       <td
                         key={cellIndex}
+                        id={`st-cell-${rowIndex}-${cellIndex}`}
                         className={cn(
                           "px-4 py-3 text-foreground whitespace-nowrap cursor-pointer",
                           "hover:bg-primary/10 transition-colors"
