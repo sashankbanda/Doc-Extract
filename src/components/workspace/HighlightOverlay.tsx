@@ -1,5 +1,5 @@
-import { motion, AnimatePresence } from "framer-motion";
 import { BoundingBox } from "@/types/document";
+import { AnimatePresence, motion } from "framer-motion";
 
 interface HighlightOverlayProps {
   highlights: BoundingBox[];
@@ -22,12 +22,15 @@ export function HighlightOverlay({
       {highlights.map((highlight, index) => (
         <motion.div
           key={index}
-          className="absolute bg-primary/20 border border-primary/40 rounded-sm"
+          className="absolute rounded-sm"
           style={{
             left: highlight.x * scale,
             top: highlight.y * scale,
             width: highlight.width * scale,
             height: highlight.height * scale,
+            backgroundColor: "hsl(var(--highlight-overlay) / 0.2)",
+            borderColor: "hsl(var(--highlight-border) / 0.4)",
+            borderWidth: "1px",
           }}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -53,7 +56,10 @@ export function HighlightOverlay({
           >
             {/* Outer glow */}
             <motion.div
-              className="absolute -inset-2 bg-primary/30 rounded-md blur-md"
+              className="absolute -inset-2 rounded-md blur-md"
+              style={{
+                backgroundColor: "hsl(var(--highlight-overlay) / 0.3)",
+              }}
               animate={{
                 opacity: [0.5, 0.8, 0.5],
               }}
@@ -64,7 +70,13 @@ export function HighlightOverlay({
               }}
             />
             {/* Inner highlight */}
-            <div className="absolute inset-0 bg-primary/30 border-2 border-primary rounded-sm" />
+            <div 
+              className="absolute inset-0 rounded-sm border-2" 
+              style={{
+                backgroundColor: "hsl(var(--highlight-overlay) / 0.3)",
+                borderColor: "hsl(var(--highlight-border))",
+              }}
+            />
           </motion.div>
         )}
       </AnimatePresence>

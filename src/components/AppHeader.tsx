@@ -1,7 +1,8 @@
-import { Link, useLocation } from "react-router-dom";
+import { ModeToggle } from "@/components/mode-toggle";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
-import { FileText, Upload, Layers } from "lucide-react";
+import { FileText, Layers, Upload } from "lucide-react";
+import { Link, useLocation } from "react-router-dom";
 
 const navItems = [
   { href: "/", label: "Home", icon: FileText },
@@ -57,6 +58,9 @@ export function AppHeader() {
             );
           })}
         </nav>
+        <div className="ml-4 pl-4 border-l border-border/50">
+          <ModeToggle />
+        </div>
       </div>
     </motion.header>
   );
