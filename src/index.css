@@ -6,50 +6,49 @@
 
 @layer base {
   :root {
-    /* Light Theme (Default) - Clean Black & White */
+    /* Light Theme - Clean Professional (Zinc) */
     --background: 0 0% 100%;
-    --foreground: 0 0% 3.9%;
-    
+    --foreground: 240 10% 3.9%;
+
     --card: 0 0% 100%;
-    --card-foreground: 0 0% 3.9%;
-    
+    --card-foreground: 240 10% 3.9%;
+
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 3.9%;
-    
-    --primary: 0 0% 9%;
+    --popover-foreground: 240 10% 3.9%;
+
+    --primary: 240 5.9% 10%;
     --primary-foreground: 0 0% 98%;
-    
-    --secondary: 0 0% 96.1%;
-    --secondary-foreground: 0 0% 9%;
-    
-    --muted: 0 0% 96.1%;
-    --muted-foreground: 0 0% 45.1%;
-    
-    --accent: 0 0% 96.1%;
-    --accent-foreground: 0 0% 9%;
-    
+
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+
+    --accent: 240 4.8% 95.9%;
+    --accent-foreground: 240 5.9% 10%;
+
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    
-    --border: 0 0% 89.8%;
-    --input: 0 0% 89.8%;
-    --ring: 0 0% 3.9%;
-    
+
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 240 10% 3.9%;
+
     --radius: 0.5rem;
 
     /* Custom tokens for light mode */
     --glass-bg: 0 0% 100%;
-    --glass-border: 0 0% 90%;
-    --glow-primary: 0 0% 9%;
-    --glow-secondary: 0 0% 80%;
+    --glass-border: 240 5.9% 90%;
+    --glow-primary: 240 5.9% 10%;
+    --glow-secondary: 240 5.9% 80%;
     --surface-elevated: 0 0% 98%;
-    
+
     /* Highlight Overlay Color - Light Theme: Light Pinkish Red */
-    /* HSL for pinkish red e.g., #ff9999 -> 0 100% 80% */
-    /* Or more vibrant red-pink: #ff4d4d -> 0 100% 65% */
-    /* Let's try a soft but distinct pinkish red */
-    --highlight-overlay: 350 100% 88%; /* Very light pink/red for background */
-    --highlight-border: 350 80% 60%;  /* Darker pink/red for border */
+    /* Making it "even" means using the same color for border/bg or making it look solid/flat */
+    --highlight-overlay: 350 100% 88%;
+    --highlight-border: 350 100% 88%;
+    /* Same as overlay for "even" look */
   }
 
   .dark {
@@ -88,7 +87,7 @@
     --glow-primary: 185 80% 55%;
     --glow-secondary: 260 60% 55%;
     --surface-elevated: 222 40% 12%;
-    
+
     /* Highlight Overlay Color - Dark Theme: Matches Primary (Cyan) */
     --highlight-overlay: 185 80% 55%;
     --highlight-border: 185 80% 55%;
@@ -121,7 +120,7 @@
 
   .glow-primary {
     box-shadow: 0 0 40px -10px hsl(var(--glow-primary) / 0.4),
-                0 0 80px -20px hsl(var(--glow-primary) / 0.2);
+      0 0 80px -20px hsl(var(--glow-primary) / 0.2);
   }
 
   .glow-primary-subtle {
@@ -130,7 +129,7 @@
 
   .glow-secondary {
     box-shadow: 0 0 40px -10px hsl(var(--glow-secondary) / 0.4),
-                0 0 80px -20px hsl(var(--glow-secondary) / 0.2);
+      0 0 80px -20px hsl(var(--glow-secondary) / 0.2);
   }
 
   .text-gradient {
@@ -148,27 +147,36 @@
 }
 
 @keyframes gradient-shift {
-  0%, 100% {
+
+  0%,
+  100% {
     background-position: 0% center;
   }
+
   50% {
     background-position: 100% center;
   }
 }
 
 @keyframes float {
-  0%, 100% {
+
+  0%,
+  100% {
     transform: translateY(0px);
   }
+
   50% {
     transform: translateY(-20px);
   }
 }
 
 @keyframes pulse-glow {
-  0%, 100% {
+
+  0%,
+  100% {
     opacity: 0.4;
   }
+
   50% {
     opacity: 0.8;
   }
