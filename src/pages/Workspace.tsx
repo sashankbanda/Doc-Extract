@@ -20,7 +20,7 @@ import { PDFViewerWrapper } from "@/components/workspace/PDFViewerWrapper";
 import { StructuredTablePanel } from "@/components/workspace/StructuredTablePanel";
 import { TwoPaneLayout } from "@/components/workspace/TwoPaneLayout";
 import { useDocumentContext } from "@/context/DocumentContext";
-import { API_BASE, apiHighlight, apiRetrieve, getStructuredDocument, OrganizedStructuredData, StructuredItem, structureDocument, updateStructuredDocument } from "@/lib/api";
+import { API_BASE, apiHighlight, apiResetSession, apiRetrieve, getStructuredDocument, OrganizedStructuredData, StructuredItem, structureDocument, updateStructuredDocument } from "@/lib/api";
 import { organizeStructuredData } from "@/lib/organizeStructuredData";
 import { FixedWidthTable, parseMultiHeaderLossRunTable, parseSimpleLossRunTable } from "@/lib/parseFixedWidthTables";
 import { cn } from "@/lib/utils";
@@ -2033,9 +2033,18 @@ export default function Workspace() {
                     <AlertDialogFooter>
                       <AlertDialogCancel>Cancel</AlertDialogCancel>
                       <AlertDialogAction
-                        onClick={() => {
-                          clearDocuments();
-                          navigate("/upload");
+                        onClick={async () => {
+                          try {
+                            await apiResetSession();
+                            clearDocuments();
+                            navigate("/upload");
+                          } catch (err) {
+                            console.error("Failed to reset session:", err);
+                            // Still clear local state? Maybe better to warn user.
+                            // For now, proceed with clearing local state as fallback
+                            clearDocuments();
+                            navigate("/upload");
+                          }
                         }}
                         className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                       >

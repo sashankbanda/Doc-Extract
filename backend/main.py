@@ -37,3 +37,6 @@ app.include_router(highlight.router)
 app.include_router(status.router)
 app.include_router(document.router)
 app.include_router(structure.router)
+from backend.routes import admin
+app.include_router(admin.router)
+
