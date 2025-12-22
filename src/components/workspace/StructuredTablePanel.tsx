@@ -39,14 +39,14 @@ export function StructuredTablePanel({
             </span>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto p-2">
+            <table className="w-full text-sm border-collapse border border-border/50">
               <thead>
-                <tr className="bg-muted/30">
+                <tr className="bg-muted/10">
                   {table.headers.map((header, i) => (
                     <th
                       key={i}
-                      className="px-4 py-3 text-left font-medium text-muted-foreground whitespace-nowrap"
+                      className="border border-border/50 px-6 py-4 text-left font-bold text-foreground whitespace-nowrap text-base"
                     >
                       {header}
                     </th>
@@ -60,8 +60,8 @@ export function StructuredTablePanel({
                     id={`st-row-${rowIndex}`}
                     ref={(el) => onRowRef?.(rowIndex, el)}
                     className={cn(
-                        "border-t border-border/30 transition-colors",
-                        selectedRowIndex === rowIndex ? "bg-primary/5" : "hover:bg-muted/20"
+                        "transition-colors",
+                        selectedRowIndex === rowIndex ? "bg-primary/5" : "hover:bg-muted/10"
                     )}
                   >
                     {row.map((cell, cellIndex) => {
@@ -71,10 +71,10 @@ export function StructuredTablePanel({
                             key={cellIndex}
                             id={`st-cell-${rowIndex}-${cellIndex}`}
                             className={cn(
-                              "px-4 py-3 text-foreground whitespace-nowrap cursor-pointer transition-colors",
+                              "border border-border/50 px-6 py-4 text-foreground whitespace-nowrap cursor-pointer transition-colors text-base",
                               isSelected 
-                                ? "bg-primary/20 ring-1 ring-inset ring-primary/30 font-medium" 
-                                : "hover:bg-primary/10"
+                                ? "bg-primary/20 ring-inset ring-primary/30 font-medium" 
+                                : "hover:bg-primary/5"
                             )}
                             onClick={() => onCellClick(cell)}
                           >
