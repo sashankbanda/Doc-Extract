@@ -1,13 +1,13 @@
-import React from "react";
-import { cn } from "@/lib/utils";
+import { EditableValue } from "@/components/EditableValue";
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
+    Accordion,
+    AccordionContent,
+    AccordionItem,
+    AccordionTrigger,
 } from "@/components/ui/accordion";
 import { StructuredItem } from "@/lib/api";
-import { EditableValue } from "@/components/EditableValue";
+import { cn } from "@/lib/utils";
+import React from "react";
 
 type HighlightHandler = (lineIds: number[], isFirstLine: boolean) => void;
 
@@ -16,9 +16,8 @@ export interface CanonicalNameViewerProps {
   onHighlight: HighlightHandler;
   expandedAccordions?: string[];
   onAccordionChange?: (value: string[]) => void;
-  isEditMode?: boolean;
-  onValueChange?: (itemId: string, newValue: string) => void;
-  getItemValue?: (item: StructuredItem) => string;
+  onSave?: (itemId: string, newValue: string) => Promise<void>;
+  savingId?: string | null;
 }
 
 // Canonical name order as specified
@@ -105,9 +104,8 @@ const CanonicalNameViewer: React.FC<CanonicalNameViewerProps> = ({
   onHighlight,
   expandedAccordions = [],
   onAccordionChange,
-  isEditMode = false,
-  onValueChange,
-  getItemValue,
+  onSave,
+  savingId,
 }) => {
   // Group items by canonical_name
   const itemsByCanonical: Record<string, StructuredItem[]> = {};
@@ -190,7 +188,7 @@ const CanonicalNameViewer: React.FC<CanonicalNameViewerProps> = ({
                         <tbody>
                           {canonicalItems.map((item, idx) => {
                             const itemId = `${item.source_key}|${item.value}|${item.line_numbers.join(',')}`;
-                            const displayValue = getItemValue ? getItemValue(item) : item.value;
+
                             
                             return (
                               <tr
@@ -202,9 +200,11 @@ const CanonicalNameViewer: React.FC<CanonicalNameViewerProps> = ({
                                 </td>
                                 <td className="p-2">
                                   <EditableValue
-                                    value={displayValue || "(no value)"}
-                                    isEditMode={isEditMode}
-                                    onChange={(newValue) => onValueChange?.(itemId, newValue)}
+                                    value={item.value}
+                                    onSave={onSave ? async (newValue) => {
+                                      await onSave(itemId, newValue);
+                                    } : undefined}
+                                    isSaving={savingId === itemId}
                                     onHighlight={() => onHighlight(item.line_numbers, true)}
                                     lineNumbers={item.line_numbers}
                                     showLineNumbers={false}

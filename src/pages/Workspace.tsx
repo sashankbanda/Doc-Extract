@@ -27,7 +27,7 @@ import { cn } from "@/lib/utils";
 import { BoundingBox, ExtractedTable, LayoutText } from "@/types/document";
 import { getStRows } from "@/utils/api";
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, Edit2, FileText, Hash, Loader2, Maximize2, RotateCcw, Save, Search, Sparkles, Table, Trash2, X, XCircle } from "lucide-react";
+import { Check, Edit2, FileText, Hash, Loader2, Maximize2, RotateCcw, Search, Sparkles, Table, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
@@ -82,9 +82,6 @@ export default function Workspace() {
   const [structureError, setStructureError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [userExpandedAccordions, setUserExpandedAccordions] = useState<string[]>([]);
-  const [isEditMode, setIsEditMode] = useState<boolean>(false);
-  const [editedItems, setEditedItems] = useState<Map<string, StructuredItem>>(new Map());
-  const [isSaving, setIsSaving] = useState<boolean>(false);
   const structuredDataViewerRef = useRef<HTMLDivElement>(null);
   const extractedTextPanelRef = useRef<HTMLDivElement>(null);
   const rightPaneRef = useRef<HTMLDivElement>(null);
@@ -102,6 +99,7 @@ export default function Workspace() {
   const [qaSavingId, setQaSavingId] = useState<string | null>(null);
   const [qaError, setQaError] = useState<string | null>(null);
   const [qaDeletingId, setQaDeletingId] = useState<string | null>(null);
+  const [structureSavingId, setStructureSavingId] = useState<string | null>(null);
   
   // Text tab state
   const [textSelectedIndex, setTextSelectedIndex] = useState<number>(-1);
@@ -628,84 +626,61 @@ export default function Workspace() {
   }, [whisperHash, dataCache, cacheData]);
 
   // Edit mode handlers (used by Structured Data & CN views)
-  const handleEditModeToggle = useCallback(() => {
-    if (isEditMode) {
-      // Cancel edit mode - discard changes
-      setEditedItems(new Map());
-      setIsEditMode(false);
-    } else {
-      // Enter edit mode
-      setIsEditMode(true);
-    }
-  }, [isEditMode]);
-
-  const handleItemValueChange = useCallback((itemId: string, newValue: string) => {
-    if (!structuredData || !structuredData.items) return;
-    
-    const item = structuredData.items.find((it) => buildItemId(it) === itemId);
-    
-    if (!item) return;
-    
-    setEditedItems((prev) => {
-      const updated = new Map(prev);
-      updated.set(itemId, {
-        ...item,
-        value: newValue,
-      });
-      return updated;
-    });
-  }, [structuredData]);
-
-  const handleSaveChanges = useCallback(async () => {
-    if (!whisperHash || !structuredData || !structuredData.items) return;
-    
-    setIsSaving(true);
-    try {
-      // Merge edited items with original items
-      const updatedItems = structuredData.items.map((item) => {
-        const itemId = buildItemId(item);
-        const editedItem = editedItems.get(itemId);
-        return editedItem || item;
-      });
-      
-      // Update backend
-      await updateStructuredDocument(whisperHash, updatedItems);
-      
-      // Reorganize with updated items
-      const organized = organizeStructuredData(updatedItems);
-      
-      // Update state and cache
-      setStructuredData(organized);
-      const cachedData = dataCache[whisperHash];
-      cacheData(whisperHash, {
-        ...cachedData,
-        structured: organized,
-      });
-      
-      // Clear edited items and exit edit mode
-      setEditedItems(new Map());
-      setIsEditMode(false);
-    } catch (err: any) {
-      console.error("[Workspace] Save changes error:", err);
-      setStructureError(err.message || "Failed to save changes");
-    } finally {
-      setIsSaving(false);
-    }
-  }, [whisperHash, structuredData, editedItems, dataCache, cacheData]);
-
-  // Get edited item value or original
-  const getItemValue = useCallback((item: StructuredItem | { value: string; line_numbers: number[]; source_key?: string }, itemId?: string): string => {
-    if (!itemId) {
-      // Fallback: create ID from item
-      const structuredItem = item as StructuredItem;
-      itemId = buildItemId(structuredItem);
-    }
-    const editedItem = editedItems.get(itemId);
-    return editedItem ? editedItem.value : item.value;
-  }, [editedItems]);
 
   // Check if there are unsaved changes
-  const hasUnsavedChanges = editedItems.size > 0;
+  // Save a single structured item value inline
+  const handleStructureItemSave = useCallback(
+    async (itemId: string, newValue: string) => {
+      if (!whisperHash || !structuredData || !structuredData.items) return;
+
+      // Find item index
+      const index = structuredData.items.findIndex((it) => buildItemId(it) === itemId);
+      if (index === -1) {
+          console.warn("[Workspace] Could not find item to save:", itemId);
+          return;
+      }
+
+      setStructureSavingId(itemId);
+      setStructureError(null);
+
+      try {
+        // Create updated items list
+        const updatedItems = structuredData.items.map((item, idx) =>
+          idx === index
+            ? {
+                ...item,
+                value: newValue,
+              }
+            : item
+        );
+
+        console.log(`[Workspace] Saving item ${itemId}: "${newValue}"`);
+        
+        // Update backend
+        const response = await updateStructuredDocument(whisperHash, updatedItems);
+        
+        // Reorganize
+        const organized = organizeStructuredData(response.items || updatedItems);
+
+        // Update state
+        setStructuredData(organized);
+
+        // Update cache
+        const cachedData = dataCache[whisperHash];
+        cacheData(whisperHash, {
+          ...cachedData,
+          structured: organized,
+        });
+
+      } catch (err: any) {
+        console.error("[Workspace] Structure save error:", err);
+        setStructureError(err.message || "Failed to save change");
+      } finally {
+        setStructureSavingId(null);
+      }
+    },
+    [whisperHash, structuredData, buildItemId, dataCache, cacheData]
+  );
 
   // Mock data for tables (can be enhanced later)
   const mockTables: ExtractedTable[] = [];
@@ -1612,9 +1587,8 @@ export default function Workspace() {
                 expandedAccordions={effectiveExpandedAccordions}
                 onAccordionChange={setUserExpandedAccordions}
                 searchQuery={searchQuery}
-                isEditMode={isEditMode}
-                onValueChange={handleItemValueChange}
-                getItemValue={getItemValue}
+                onSave={handleStructureItemSave}
+                savingId={structureSavingId}
                 items={structuredData.items}
               />
             )}
@@ -1648,9 +1622,8 @@ export default function Workspace() {
                 onHighlight={handleStructuredHighlight}
                 expandedAccordions={effectiveExpandedAccordions}
                 onAccordionChange={setUserExpandedAccordions}
-                isEditMode={isEditMode}
-                onValueChange={handleItemValueChange}
-                getItemValue={getItemValue}
+                onSave={handleStructureItemSave}
+                savingId={structureSavingId}
               />
             )}
           </div>
@@ -2068,54 +2041,12 @@ export default function Workspace() {
                 </Button>
                 {structuredData && structuredData.items && structuredData.items.length > 0 && activeTab !== "qa" && (
                   <>
-                    {!isEditMode ? (
-                      <Button
-                        onClick={handleEditModeToggle}
-                        variant="outline"
-                        size="sm"
-                        className="gap-2 whitespace-nowrap"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                        <span className="hidden sm:inline">Edit</span>
-                      </Button>
-                    ) : (
-                      <>
-                        <Button
-                          onClick={handleSaveChanges}
-                          disabled={isSaving || !hasUnsavedChanges}
-                          variant="default"
-                          size="sm"
-                          className="gap-2 whitespace-nowrap"
-                        >
-                          {isSaving ? (
-                            <>
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                              <span className="hidden sm:inline">Saving...</span>
-                            </>
-                          ) : (
-                            <>
-                              <Save className="w-4 h-4" />
-                              <span className="hidden sm:inline">Save Changes</span>
-                            </>
-                          )}
-                        </Button>
-                        <Button
-                          onClick={handleEditModeToggle}
-                          variant="outline"
-                          size="sm"
-                          className="gap-2 whitespace-nowrap"
-                          disabled={isSaving}
-                        >
-                          <XCircle className="w-4 h-4" />
-                          <span className="hidden sm:inline">Cancel</span>
-                        </Button>
-                      </>
-                    )}
+                    {/* Row-level editing is now enabled by default */}
                   </>
                 )}
                 <Button
                   onClick={handleStructureDocument}
-                  disabled={structureLoading || !resultText || isEditMode}
+                  disabled={structureLoading || !resultText}
                   variant="outline"
                   size="sm"
                   className="gap-2 shrink-0 whitespace-nowrap"

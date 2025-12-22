@@ -1,12 +1,12 @@
-import React, { useState } from "react";
-import { cn } from "@/lib/utils";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
 import { EditableValue } from "@/components/EditableValue";
+import {
+    Accordion,
+    AccordionContent,
+    AccordionItem,
+    AccordionTrigger,
+} from "@/components/ui/accordion";
+import { cn } from "@/lib/utils";
+import React from "react";
 
 type HighlightHandler = (lineIds: number[], isFirstLine: boolean) => void;
 
@@ -31,9 +31,8 @@ export interface StructuredDataViewerProps {
   searchQuery?: string;
   onSearchResultClick?: (result: any) => void;
   searchResults?: any[];
-  isEditMode?: boolean;
-  onValueChange?: (itemId: string, newValue: string) => void;
-  getItemValue?: (item: { value: string; line_numbers: number[] }, itemId: string) => string;
+  onSave?: (itemId: string, newValue: string) => Promise<void>;
+  savingId?: string | null;
   items?: Array<{
     source_key: string;
     canonical_name?: string | null;
@@ -169,9 +168,8 @@ const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({
   expandedAccordions = [],
   onAccordionChange,
   searchQuery = "",
-  isEditMode = false,
-  onValueChange,
-  getItemValue,
+  onSave,
+  savingId,
   items = [],
 }) => {
   // Helper to find item ID from value and line_numbers
@@ -187,19 +185,6 @@ const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({
     return `|${value}|${lineNumbers.join(',')}`;
   };
 
-  // Helper to get display value
-  const getDisplayValue = (value: string, lineNumbers: number[]): string => {
-    if (!isEditMode || !getItemValue) return value;
-    const itemId = getItemId(value, lineNumbers);
-    const matchingItem = items.find(
-      (item) => item.value === value && 
-      JSON.stringify(item.line_numbers.sort()) === JSON.stringify(lineNumbers.sort())
-    );
-    if (matchingItem) {
-      return getItemValue(matchingItem, itemId);
-    }
-    return value;
-  };
   if (!sections || Object.keys(sections).length === 0) {
     return (
       <div className={sectionCard}>
@@ -309,12 +294,12 @@ const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({
                             >
                               <span className="text-muted-foreground">•</span>
                               <EditableValue
-                                value={getDisplayValue(item.value, item.line_numbers)}
-                                isEditMode={isEditMode}
-                                onChange={(newValue) => {
+                                value={item.value}
+                                onSave={onSave ? async (newValue) => {
                                   const itemId = getItemId(item.value, item.line_numbers);
-                                  onValueChange?.(itemId, newValue);
-                                }}
+                                  await onSave(itemId, newValue);
+                                } : undefined}
+                                isSaving={savingId === getItemId(item.value, item.line_numbers)}
                                 onHighlight={() => onHighlight(item.line_numbers, true)}
                                 lineNumbers={item.line_numbers}
                                 showLineNumbers={true}
@@ -478,12 +463,12 @@ const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({
                             >
                               <span className="text-muted-foreground text-xs">•</span>
                               <EditableValue
-                                value={getDisplayValue(item.value, item.line_numbers)}
-                                isEditMode={isEditMode}
-                                onChange={(newValue) => {
+                                value={item.value}
+                                onSave={onSave ? async (newValue) => {
                                   const itemId = getItemId(item.value, item.line_numbers);
-                                  onValueChange?.(itemId, newValue);
-                                }}
+                                  await onSave(itemId, newValue);
+                                } : undefined}
+                                isSaving={savingId === getItemId(item.value, item.line_numbers)}
                                 onHighlight={() => onHighlight(item.line_numbers, true)}
                                 lineNumbers={item.line_numbers}
                                 showLineNumbers={true}
@@ -626,13 +611,17 @@ const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({
                                   )}
                                 >
                                   <span className="text-muted-foreground text-xs">•</span>
-                                  <HighlightValue
+                                  <EditableValue
+                                    value={item.value}
+                                    onSave={onSave ? async (newValue) => {
+                                      const itemId = getItemId(item.value, item.line_numbers);
+                                      await onSave(itemId, newValue);
+                                    } : undefined}
+                                    isSaving={savingId === getItemId(item.value, item.line_numbers)}
+                                    onHighlight={() => onHighlight(item.line_numbers, true)}
                                     lineNumbers={item.line_numbers}
-                                    onHighlight={onHighlight}
                                     showLineNumbers={true}
-                                  >
-                                    {item.value}
-                                  </HighlightValue>
+                                  />
                                 </div>
                               );
                             })}
