@@ -27,7 +27,7 @@ import { cn } from "@/lib/utils";
 import { BoundingBox, ExtractedTable, LayoutText } from "@/types/document";
 import { getStRows } from "@/utils/api";
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, Edit2, FileText, Hash, Loader2, Maximize2, RotateCcw, Search, Sparkles, Table, Trash2, X } from "lucide-react";
+import { Check, Download, Edit2, FileText, Hash, Loader2, Maximize2, RotateCcw, Search, Sparkles, Table, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
@@ -769,6 +769,33 @@ export default function Workspace() {
     },
     [whisperHash, structuredData, buildItemId, dataCache, cacheData, qaSelectedIndex]
   );
+
+  // QA Export: Download current QA data as JSON
+  const handleExportQA = useCallback(() => {
+    if (!structuredData || !structuredData.items) return;
+
+    try {
+      // Create simplified array of key-value pairs
+      const exportData = structuredData.items.map(item => ({
+        Source_key: item.source_key || "",
+        Value: item.value || ""
+      }));
+
+      // Create blob and download link
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `qa_export_${whisperHash?.substring(0, 8) || "data"}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("[Workspace] Export error:", err);
+      // Optional: set some UI error state if needed
+    }
+  }, [structuredData, whisperHash]);
 
   // Highlight a specific line id (0-based) using existing highlight API
   // Returns the bounding box if successful, throws error if failed
@@ -2043,6 +2070,18 @@ export default function Workspace() {
                   <>
                     {/* Row-level editing is now enabled by default */}
                   </>
+                )}
+                {activeTab === "qa" && structuredData?.items && structuredData.items.length > 0 && (
+                  <Button
+                    onClick={handleExportQA}
+                    variant="outline"
+                    size="sm"
+                    className="gap-2 shrink-0 whitespace-nowrap"
+                    title="Export QA data to JSON"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span className="hidden sm:inline">Export JSON</span>
+                  </Button>
                 )}
                 <Button
                   onClick={handleStructureDocument}
