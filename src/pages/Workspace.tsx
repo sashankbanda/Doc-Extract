@@ -2,15 +2,15 @@ import CanonicalNameViewer from "@/components/CanonicalNameViewer";
 import DocumentViewer, { guessFileType } from "@/components/DocumentViewer";
 import StructuredDataViewer from "@/components/StructuredDataViewer";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -102,10 +102,15 @@ export default function Workspace() {
   const [qaSavingId, setQaSavingId] = useState<string | null>(null);
   const [qaError, setQaError] = useState<string | null>(null);
   const [qaDeletingId, setQaDeletingId] = useState<string | null>(null);
+  
+  // Text tab state
+  const [textSelectedIndex, setTextSelectedIndex] = useState<number>(-1);
+  const textItemRefs = useRef<Map<number, HTMLDivElement>>(new Map());
 
   // ST tab state
   const [stRows, setStRows] = useState<ExtractedTable[] | null>(null);
   const [stLoading, setStLoading] = useState<boolean>(false);
+  const [stSelectedColIndex, setStSelectedColIndex] = useState<number>(0);
 
   const handleFetchStRows = useCallback(async () => {
        if (!whisperHash) return;
@@ -977,7 +982,7 @@ export default function Workspace() {
             pageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
           }
         }
-      }, 150);
+      }, 300); // Increased timeout to 300ms to ensure render
     },
     [highlightLineById]
   );
@@ -1032,7 +1037,7 @@ export default function Workspace() {
       // Ensure selected row is visible in the QA panel
       requestAnimationFrame(() => {
         const row = qaRowRefs.current.get(clampedIndex);
-        row?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        row?.scrollIntoView({ block: "center", behavior: "smooth" });
       });
 
       if (qaItem.item.line_numbers && qaItem.item.line_numbers.length > 0) {
@@ -1050,6 +1055,55 @@ export default function Workspace() {
     path?: string; // For structured data: section/claim/category/field
     elementId?: string; // For scrolling to element
     tab?: TabType;
+  };
+
+  // Handler for Text tab keyboard navigation
+  const handleTextKeyDown = (e: React.KeyboardEvent) => {
+     if (!layoutTextItems || layoutTextItems.length === 0) return;
+     
+     let newIndex = textSelectedIndex;
+     let changed = false;
+
+     if (e.key === "ArrowDown") {
+         e.preventDefault();
+         if (newIndex < layoutTextItems.length - 1) {
+             newIndex++;
+             changed = true;
+         }
+     } else if (e.key === "ArrowUp") {
+         e.preventDefault();
+         if (newIndex > 0) {
+             newIndex--;
+             changed = true;
+         }
+     }
+     
+     if (changed) {
+         setTextSelectedIndex(newIndex);
+         const item = layoutTextItems[newIndex];
+         
+         // Scroll item into view
+         const el = textItemRefs.current.get(newIndex);
+         el?.scrollIntoView({ block: "center", behavior: "smooth" });
+         
+         // Trigger highlight (using existing click handler logic effectively)
+         // We reuse the click logic but programmatically
+         // Extract line index from item.id (format: "line-{index}")
+         const lineIndexMatch = item.id.match(/line-(\d+)/);
+         const lineIndex = lineIndexMatch ? parseInt(lineIndexMatch[1], 10) : newIndex;
+         
+         // Highlight
+         highlightLineById(lineIndex).then((bbox) => {
+              setActiveBoundingBox(bbox);
+              // Scroll PDF to highlight
+              setTimeout(() => {
+                  const pageElement = document.getElementById(`page_${bbox.page}`);
+                  if (pageElement) {
+                      pageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  }
+              }, 150);
+         }).catch(err => console.warn("Highlight failed", err));
+     }
   };
 
   const searchIndex = useMemo((): SearchResult[] => {
@@ -1265,19 +1319,97 @@ export default function Workspace() {
   useEffect(() => {
     if (activeTab !== "st" || !stTable || !stTable.rows.length) return;
 
-    const initial = Math.min(stSelectedIndex, stTable.rows.length - 1);
-    setStSelectedIndex(initial);
+    if (stRows && stRows.length > 0 && stRows[0].rows.length > 0) {
+        // Use backend rows if available
+        const initial = Math.min(stSelectedIndex, stRows[0].rows.length - 1);
+        setStSelectedIndex(initial);
+        // Reset column if needed or keep it
+        setStSelectedColIndex(prev => Math.min(prev, stRows[0].headers.length - 1));
 
-    const row = stTable.rows[initial];
-    if (row.lineIndices && row.lineIndices.length > 0) {
-      handleStructuredHighlight(row.lineIndices, true);
+        const row = stRows[0].rows[initial];
+        // Trigger highlight if row has line indices (check first available cell if needed?)
+        // Actually, we highlight the specific cell if possible, or just the row
+        // For standard "row" highlight, we can use the line indices from any cell or aggregate
+        
+        // Simulating row highlight for now by picking a representative cell with lines
+        const cellWithLines = row.find(c => c.lineIndices && c.lineIndices.length > 0);
+        if (cellWithLines) {
+           handleStructuredHighlight(cellWithLines.lineIndices, true);
+        }
+
+        requestAnimationFrame(() => {
+            const el = stRowRefs.current.get(initial);
+            el?.scrollIntoView({ block: "center", behavior: "smooth" });
+        });
     }
+    
+    // Fallback or secondary (local stTable logic if separate) - keeping original logic as backup or if used differently
+    // The original code used stTable (local parse) vs stRows (backend)
+    // We should prioritize stRows (backend) if that's what's being displayed
+  }, [activeTab, stRows, stSelectedIndex, handleStructuredHighlight]);
 
-    requestAnimationFrame(() => {
-      const el = stRowRefs.current.get(initial);
-      el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-    });
-  }, [activeTab, stTable, stSelectedIndex, handleStructuredHighlight]);
+  // Handler for ST keyboard navigation
+  const handleStKeyDown = (e: React.KeyboardEvent) => {
+      if (!stRows || stRows.length === 0 || stRows[0].rows.length === 0) return;
+      
+      const currentTable = stRows[0];
+      const rows = currentTable.rows;
+      const headers = currentTable.headers;
+      
+      let newRowIndex = stSelectedIndex;
+      let newColIndex = stSelectedColIndex;
+      let changed = false;
+
+      if (e.key === "ArrowDown") {
+          e.preventDefault();
+          if (newRowIndex < rows.length - 1) {
+              newRowIndex++;
+              changed = true;
+          }
+      } else if (e.key === "ArrowUp") {
+           e.preventDefault();
+           if (newRowIndex > 0) {
+               newRowIndex--;
+               changed = true;
+           }
+      } else if (e.key === "ArrowRight") {
+          e.preventDefault();
+          if (newColIndex < headers.length - 1) {
+              newColIndex++;
+              changed = true;
+          }
+      } else if (e.key === "ArrowLeft") {
+          e.preventDefault();
+          if (newColIndex > 0) {
+              newColIndex--;
+              changed = true;
+          }
+      }
+
+      if (changed) {
+          setStSelectedIndex(newRowIndex);
+          setStSelectedColIndex(newColIndex);
+          
+          const row = rows[newRowIndex];
+          const cell = row[newColIndex];
+          
+          // Scroll cell into view (handles both X and Y)
+          const cellId = `st-cell-${newRowIndex}-${newColIndex}`;
+          const cellEl = document.getElementById(cellId);
+          if (cellEl) {
+               cellEl.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+          } else {
+               // Fallback
+               const el = stRowRefs.current.get(newRowIndex);
+               el?.scrollIntoView({ block: "center", behavior: "smooth" });
+          }
+          
+          // Trigger PDF highlight
+          if (cell && cell.lineIndices && cell.lineIndices.length > 0) {
+               handleStructuredHighlight(cell.lineIndices, true);
+          }
+      }
+  };
 
   // Derive search-expanded accordions from search results (temporary, only when search is active)
   const searchExpandedAccordions = useMemo(() => {
@@ -1427,12 +1559,28 @@ export default function Workspace() {
     switch (activeTab) {
       case "text":
         return (
+          <div 
+             className="outline-none" 
+             tabIndex={0} 
+             onKeyDown={handleTextKeyDown}
+             ref={extractedTextPanelRef} // Ref moves to wrapper to capture focus
+          >
           <ExtractedTextPanel
             items={layoutTextItems}
             onItemHover={handleItemHover}
-            onItemClick={handleItemClick}
+            onItemClick={(bbox, item, index) => {
+                handleItemClick(bbox, item, index);
+                setTextSelectedIndex(index); // Sync selection on click
+            }}
             searchQuery={searchQuery}
+            selectedIndex={textSelectedIndex}
+            onItemRef={(index, el) => {
+                const map = textItemRefs.current;
+                if (el) map.set(index, el);
+                else map.delete(index);
+            }}
           />
+          </div>
         );
       case "tables":
         return (
@@ -1707,7 +1855,11 @@ export default function Workspace() {
       case "st":
         // Use StructuredTablePanel with data from backend
         return (
-           <div className="space-y-4 min-w-[720px] outline-none"> 
+           <div 
+             className="space-y-4 min-w-[720px] outline-none"
+             tabIndex={0}
+             onKeyDown={handleStKeyDown}
+           > 
               {!stRows && !stLoading && (
                 <div className="flex flex-col items-center justify-center p-8 text-muted-foreground bg-muted/20 rounded-xl border border-border/50">
                   <Table className="w-12 h-12 mb-4 opacity-20" />
@@ -1737,6 +1889,28 @@ export default function Workspace() {
                       if (cell && cell.lineIndices && cell.lineIndices.length > 0) {
                            handleStructuredHighlight(cell.lineIndices, true);
                       }
+                      
+                      // Update selection on click
+                      if (stRows && stRows.length > 0) {
+                          // Find row and col index for this cell
+                          // This is a bit inefficient (O(N*M)), but fine for typical table sizes
+                          // Alternatively, we could pass indices in the cell object or from the child component
+                          stRows[0].rows.forEach((r, rIdx) => {
+                             r.forEach((c, cIdx) => {
+                                 if (c === cell) {
+                                     setStSelectedIndex(rIdx);
+                                     setStSelectedColIndex(cIdx);
+                                 }
+                             });
+                          });
+                      }
+                  }}
+                  selectedRowIndex={stSelectedIndex}
+                  selectedColIndex={stSelectedColIndex}
+                  onRowRef={(index, el) => {
+                      const map = stRowRefs.current;
+                      if (el) map.set(index, el);
+                      else map.delete(index);
                   }}
                 />
               )}

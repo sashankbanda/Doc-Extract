@@ -27,6 +27,7 @@ export interface ExtractedField {
 export interface TableCell {
   value: string;
   boundingBox?: BoundingBox;
+  lineIndices?: number[];
 }
 
 export interface ExtractedTable {

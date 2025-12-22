@@ -7,12 +7,18 @@ interface StructuredTablePanelProps {
   tables: ExtractedTable[];
   onTableHover: (boundingBox: BoundingBox | null) => void;
   onCellClick: (cell: any) => void;
+  selectedRowIndex?: number;
+  selectedColIndex?: number;
+  onRowRef?: (index: number, el: HTMLTableRowElement | null) => void;
 }
 
 export function StructuredTablePanel({
   tables,
   onTableHover,
   onCellClick,
+  selectedRowIndex,
+  selectedColIndex,
+  onRowRef,
 }: StructuredTablePanelProps) {
   return (
     <div className="space-y-6">
@@ -52,21 +58,30 @@ export function StructuredTablePanel({
                   <tr
                     key={rowIndex}
                     id={`st-row-${rowIndex}`}
-                    className="border-t border-border/30 hover:bg-muted/20 transition-colors"
+                    ref={(el) => onRowRef?.(rowIndex, el)}
+                    className={cn(
+                        "border-t border-border/30 transition-colors",
+                        selectedRowIndex === rowIndex ? "bg-primary/5" : "hover:bg-muted/20"
+                    )}
                   >
-                    {row.map((cell, cellIndex) => (
-                      <td
-                        key={cellIndex}
-                        id={`st-cell-${rowIndex}-${cellIndex}`}
-                        className={cn(
-                          "px-4 py-3 text-foreground whitespace-nowrap cursor-pointer",
-                          "hover:bg-primary/10 transition-colors"
-                        )}
-                        onClick={() => onCellClick(cell)}
-                      >
-                        {cell.value}
-                      </td>
-                    ))}
+                    {row.map((cell, cellIndex) => {
+                       const isSelected = selectedRowIndex === rowIndex && selectedColIndex === cellIndex;
+                       return (
+                          <td
+                            key={cellIndex}
+                            id={`st-cell-${rowIndex}-${cellIndex}`}
+                            className={cn(
+                              "px-4 py-3 text-foreground whitespace-nowrap cursor-pointer transition-colors",
+                              isSelected 
+                                ? "bg-primary/20 ring-1 ring-inset ring-primary/30 font-medium" 
+                                : "hover:bg-primary/10"
+                            )}
+                            onClick={() => onCellClick(cell)}
+                          >
+                            {cell.value}
+                          </td>
+                       );
+                    })}
                   </tr>
                 ))}
               </tbody>
