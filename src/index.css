@@ -6,49 +6,59 @@
 
 @layer base {
   :root {
-    /* Light Theme - Clean Professional (Zinc) */
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
+    /* Light Theme - Modern Professional (Navy/Slate) */
+    --background: 210 40% 98%;
+    /* Slate 50 */
+    --foreground: 222 47% 11%;
+    /* Slate 900 */
 
     --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
+    /* White */
+    --card-foreground: 222 47% 11%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
+    --popover-foreground: 222 47% 11%;
 
-    --primary: 240 5.9% 10%;
-    --primary-foreground: 0 0% 98%;
+    --primary: 222 47% 11%;
+    /* Navy (Slate 900) */
+    --primary-foreground: 210 40% 98%;
 
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
+    --secondary: 210 40% 96.1%;
+    /* Slate 100 */
+    --secondary-foreground: 222 47% 11%;
 
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
+    --muted: 210 40% 96.1%;
+    /* Slate 100 */
+    --muted-foreground: 215 16% 47%;
+    /* Slate 500 */
 
-    --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
+    --accent: 210 40% 96.1%;
+    /* Slate 100 */
+    --accent-foreground: 222 47% 11%;
 
     --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
+    --destructive-foreground: 210 40% 98%;
 
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --ring: 240 10% 3.9%;
+    --border: 214.3 31.8% 91.4%;
+    /* Slate 200 */
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222 47% 11%;
 
     --radius: 0.5rem;
 
     /* Custom tokens for light mode */
     --glass-bg: 0 0% 100%;
-    --glass-border: 240 5.9% 90%;
-    --glow-primary: 240 5.9% 10%;
-    --glow-secondary: 240 5.9% 80%;
-    --surface-elevated: 0 0% 98%;
+    --glass-border: 214.3 31.8% 91.4%;
+    --glow-primary: 222 47% 11%;
+    /* Navy Glow */
+    --glow-secondary: 217 91% 60%;
+    /* Bright Blue Glow */
+    --surface-elevated: 0 0% 100%;
 
-    /* Highlight Overlay Color - Light Theme: Light Pinkish Red */
-    /* Making it "even" means using the same color for border/bg or making it look solid/flat */
-    --highlight-overlay: 350 100% 88%;
-    --highlight-border: 350 100% 88%;
-    /* Same as overlay for "even" look */
+    /* Highlight Overlay Color */
+    --highlight-overlay: 217 91% 60%;
+    /* Bright Blue highlight to match accent */
+    --highlight-border: 217 91% 60%;
   }
 
   .dark {
