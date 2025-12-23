@@ -15,7 +15,8 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { getStructuredDocument, StructuredItem, structureDocument } from "@/lib/api";
+import { useComparisonContext } from "@/context/ComparisonContext";
+import { getStructuredDocument, structureDocument } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Loader2, Play, Settings2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -39,41 +40,44 @@ interface ComparisonTabProps {
     whisperHash: string | null;
 }
 
-export function ComparisonTab({ whisperHash }: ComparisonTabProps) {
-    const [modelA, setModelA] = useState<string>(AVAILABLE_MODELS[0].id);
-    const [modelB, setModelB] = useState<string>(AVAILABLE_MODELS[1].id);
-    
-    // Allow custom model input
-    const [customModelA, setCustomModelA] = useState("");
-    const [customModelB, setCustomModelB] = useState("");
-    const [isCustomA, setIsCustomA] = useState(false);
-    const [isCustomB, setIsCustomB] = useState(false);
 
-    const [dataA, setDataA] = useState<StructuredItem[] | null>(null);
-    const [dataB, setDataB] = useState<StructuredItem[] | null>(null);
+
+export function ComparisonTab({ whisperHash }: ComparisonTabProps) {
+    const {
+        modelA, setModelA,
+        modelB, setModelB,
+        customModelA, setCustomModelA,
+        customModelB, setCustomModelB,
+        isCustomA, setIsCustomA,
+        isCustomB, setIsCustomB,
+        dataA, setDataA,
+        dataB, setDataB,
+        filter, setFilter
+    } = useComparisonContext();
     
     const [loadingA, setLoadingA] = useState(false);
     const [loadingB, setLoadingB] = useState(false);
     
-    const [filter, setFilter] = useState<"all" | "mismatch" | "match">("all");
-
     // Load initial data for Model A if available (Baseline)
     useEffect(() => {
         if (!whisperHash) return;
         
-        // Try to load existing data for the initial view (assuming it was run with default model)
-        const loadInitial = async () => {
-            try {
-               const existing = await getStructuredDocument(whisperHash);
-               if (existing && existing.items) {
-                   setDataA(existing.items);
-               }
-            } catch (e) {
-                // ignore
-            }
-        };
-        loadInitial();
-    }, [whisperHash]);
+        // Only load if dataA is empty (first time or clear)
+        if (!dataA) {
+            // Try to load existing data for the initial view (assuming it was run with default model)
+            const loadInitial = async () => {
+                try {
+                   const existing = await getStructuredDocument(whisperHash);
+                   if (existing && existing.items) {
+                       setDataA(existing.items);
+                   }
+                } catch (e) {
+                    // ignore
+                }
+            };
+            loadInitial();
+        }
+    }, [whisperHash, dataA, setDataA]);
 
     const handleRunComparison = async () => {
         if (!whisperHash) return;

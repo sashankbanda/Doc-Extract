@@ -20,6 +20,7 @@ import { FileSelectorDropdown } from "@/components/workspace/FileSelectorDropdow
 import { PDFViewerWrapper } from "@/components/workspace/PDFViewerWrapper";
 import { StructuredTablePanel } from "@/components/workspace/StructuredTablePanel";
 import { TwoPaneLayout } from "@/components/workspace/TwoPaneLayout";
+import { ComparisonProvider } from "@/context/ComparisonContext";
 import { useDocumentContext } from "@/context/DocumentContext";
 import { API_BASE, apiHighlight, apiResetSession, apiRetrieve, getStructuredDocument, OrganizedStructuredData, StructuredItem, structureDocument, updateStructuredDocument } from "@/lib/api";
 import { organizeStructuredData } from "@/lib/organizeStructuredData";
@@ -1962,6 +1963,7 @@ export default function Workspace() {
 
   return (
     <div className="min-h-screen pt-16">
+      <ComparisonProvider>
       <TwoPaneLayout
         leftPane={
           isPdf ? (
@@ -2203,6 +2205,7 @@ export default function Workspace() {
           </div>
         }
       />
+      </ComparisonProvider>
     </div>
   );
 }
