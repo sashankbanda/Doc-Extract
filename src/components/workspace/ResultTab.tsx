@@ -3,7 +3,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useComparisonContext } from "@/context/ComparisonContext";
 import { cn } from "@/lib/utils";
-import { CheckCircle2, Download } from "lucide-react";
+import { CheckCircle2, Download, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 interface ResultTabProps {
@@ -11,7 +11,7 @@ interface ResultTabProps {
 }
 
 export function ResultTab({ onHighlight }: ResultTabProps) {
-    const { comparisonRows, dataA, dataB, approvedItems, whisperHash } = useComparisonContext(); // Assume whisperHash is exposed
+    const { comparisonRows, dataA, dataB, approvedItems, whisperHash, deleteItem } = useComparisonContext(); // Assume whisperHash is exposed
     const [filter, setFilter] = useState<'all' | 'approved' | 'null'>('all');
 
     const filteredRows = comparisonRows.filter(row => {
@@ -167,8 +167,23 @@ export function ResultTab({ onHighlight }: ResultTabProps) {
                                             <TableCell className={cn("align-top whitespace-pre-wrap break-words min-w-0", isApproved && "font-medium text-green-900")}>
                                                 {displayValue}
                                             </TableCell>
-                                             <TableCell className="align-top text-right text-xs text-muted-foreground">
+                                             <TableCell className="align-top text-right text-xs text-muted-foreground w-[50px]">
                                                 {row.sortKey !== Number.MAX_SAFE_INTEGER ? `L${row.sortKey}` : "-"}
+                                            </TableCell>
+                                            <TableCell className="align-top w-[40px] p-2">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        if (window.confirm("Are you sure you want to delete this row? This action will remove it from the final result.")) {
+                                                            deleteItem(row.key);
+                                                        }
+                                                    }}
+                                                >
+                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                </Button>
                                             </TableCell>
                                         </TableRow>
                                     );

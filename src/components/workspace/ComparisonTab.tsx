@@ -18,7 +18,7 @@ import {
 import { useComparisonContext } from "@/context/ComparisonContext";
 import { getStructuredDocument, structureDocument } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { Check, CheckCircle2, Edit2, Loader2, Play, Settings2, X } from "lucide-react";
+import { Check, CheckCircle2, Edit2, Loader2, Play, Settings2, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -403,12 +403,27 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
                                 key={`a-${i}`} 
                                 onClick={() => onHighlight?.(row.lineNumbers)}
                                 className={cn(
-                                   "p-3 rounded border text-sm grid gap-1 cursor-pointer transition-colors hover:bg-muted/50",
+                                   "p-3 rounded border text-sm grid gap-1 cursor-pointer transition-colors hover:bg-muted/50 group",
                                    !row.isMatch && "border-destructive/20 bg-destructive/5"
                                )}
                            >
                                <div className="flex justify-between items-center">
-                                    <div className="font-semibold text-xs text-muted-foreground uppercase tracking-wider">{row.key}</div>
+                                    <div className="flex items-center gap-2">
+                                        <div className="font-semibold text-xs text-muted-foreground uppercase tracking-wider">{row.key}</div>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-4 w-4 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (window.confirm("Are you sure you want to delete this row? This action will remove it from the final result.")) {
+                                                    deleteItem(row.key);
+                                                }
+                                            }}
+                                        >
+                                            <Trash2 className="w-3 h-3" />
+                                        </Button>
+                                    </div>
                                     {row.sortKey !== Number.MAX_SAFE_INTEGER && (
                                         <div className="text-[10px] text-muted-foreground opacity-50">L{row.sortKey}</div>
                                     )}
@@ -442,12 +457,27 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
                                 key={`b-${i}`} 
                                 onClick={() => onHighlight?.(row.lineNumbers)}
                                 className={cn(
-                                   "p-3 rounded border text-sm grid gap-1 cursor-pointer transition-colors hover:bg-muted/50",
+                                   "p-3 rounded border text-sm grid gap-1 cursor-pointer transition-colors hover:bg-muted/50 group",
                                    !row.isMatch && "border-destructive/20 bg-destructive/5"
                                )}
                            >
                                 <div className="flex justify-between items-center">
-                                    <div className="font-semibold text-xs text-muted-foreground uppercase tracking-wider">{row.key}</div>
+                                    <div className="flex items-center gap-2">
+                                        <div className="font-semibold text-xs text-muted-foreground uppercase tracking-wider">{row.key}</div>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-4 w-4 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (window.confirm("Are you sure you want to delete this row? This action will remove it from the final result.")) {
+                                                    deleteItem(row.key);
+                                                }
+                                            }}
+                                        >
+                                            <Trash2 className="w-3 h-3" />
+                                        </Button>
+                                    </div>
                                     {row.sortKey !== Number.MAX_SAFE_INTEGER && (
                                         <div className="text-[10px] text-muted-foreground opacity-50">L{row.sortKey}</div>
                                     )}

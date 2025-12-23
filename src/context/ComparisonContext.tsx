@@ -38,6 +38,7 @@ interface ComparisonContextType {
     // Approval State
     approvedItems: Record<string, string>; // SourceKey -> ApprovedValue
     approveItem: (key: string, value: string) => void;
+    deleteItem: (key: string) => void;
     // Update Logic
     updateItem: (model: 'A' | 'B', index: number, newKey: string, newValue: string) => void;
     whisperHash: string | undefined | null;
@@ -75,6 +76,10 @@ export function ComparisonProvider({ children, whisperHash }: { children: ReactN
 
     // Keyed by source_key. Stores the definitive value.
     const [approvedItems, setApprovedItems] = useState<Record<string, string>>(() => loadState("approvedItems", {}));
+    
+    // Set of keys that have been deleted by the user
+    // We use a Set<string> but store as array in localStorage
+    const [deletedKeys, setDeletedKeys] = useState<Set<string>>(() => new Set(loadState("deletedKeys", [])));
 
     // Save state on change
     useEffect(() => {
@@ -92,13 +97,16 @@ export function ComparisonProvider({ children, whisperHash }: { children: ReactN
         save("dataB", dataB);
         save("filter", filter);
         save("approvedItems", approvedItems);
-    }, [whisperHash, modelA, modelB, customModelA, customModelB, isCustomA, isCustomB, dataA, dataB, filter, approvedItems]);
+        save("deletedKeys", Array.from(deletedKeys));
+    }, [whisperHash, modelA, modelB, customModelA, customModelB, isCustomA, isCustomB, dataA, dataB, filter, approvedItems, deletedKeys]);
 
 
     const resetComparisonState = () => {
         setDataA(null);
         setDataB(null);
         setFilter("all");
+        setApprovedItems({});
+        setDeletedKeys(new Set());
         if (whisperHash) {
              localStorage.removeItem(`comparison_${whisperHash}_dataA`);
              localStorage.removeItem(`comparison_${whisperHash}_dataB`);
@@ -142,6 +150,11 @@ export function ComparisonProvider({ children, whisperHash }: { children: ReactN
             const maxLength = Math.max(itemsA.length, itemsB.length);
 
             for (let i = 0; i < maxLength; i++) {
+                const uniqueKey = key + (maxLength > 1 ? ` [${i + 1}]` : "");
+                
+                // Skip if deleted
+                if (deletedKeys.has(uniqueKey)) continue;
+
                 const entryA = itemsA[i];
                 const entryB = itemsB[i];
 
@@ -166,7 +179,7 @@ export function ComparisonProvider({ children, whisperHash }: { children: ReactN
                 const minLine = allLines.length > 0 ? Math.min(...allLines) : Number.MAX_SAFE_INTEGER;
 
                 rows.push({
-                    key: key + (maxLength > 1 ? ` [${i + 1}]` : ""), // Distinguish duplicates
+                    key: uniqueKey, // Distinguish duplicates
                     valA: displayA,
                     valB: displayB,
                     isMatch,
@@ -181,13 +194,21 @@ export function ComparisonProvider({ children, whisperHash }: { children: ReactN
         // Sort by line number (document order)
         return rows.sort((a, b) => a.sortKey - b.sortKey);
 
-    }, [dataA, dataB]);
+    }, [dataA, dataB, deletedKeys]);
 
     const approveItem = (key: string, value: string) => {
         setApprovedItems(prev => ({
             ...prev,
             [key]: value
         }));
+    };
+    
+    const deleteItem = (key: string) => {
+        setDeletedKeys(prev => {
+            const next = new Set(prev);
+            next.add(key);
+            return next;
+        });
     };
 
     const updateItem = (model: 'A' | 'B', index: number, newKey: string, newValue: string) => {
@@ -246,7 +267,8 @@ export function ComparisonProvider({ children, whisperHash }: { children: ReactN
         approvedItems,
         approveItem,
         updateItem,
-        whisperHash
+        whisperHash,
+        deleteItem
     };
 
     return (
