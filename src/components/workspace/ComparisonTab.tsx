@@ -50,7 +50,8 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
         isCustomB, setIsCustomB,
         dataA, setDataA,
         dataB, setDataB,
-        filter, setFilter
+        filter, setFilter,
+        comparisonRows
     } = useComparisonContext();
     
     const [loadingA, setLoadingA] = useState(false);
@@ -82,10 +83,10 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
             // Try to load existing data for the initial view (assuming it was run with default model)
             const loadInitial = async () => {
                 try {
-                   const existing = await getStructuredDocument(whisperHash);
-                   if (existing && existing.items) {
-                       setDataA(existing.items);
-                   }
+                    const existing = await getStructuredDocument(whisperHash);
+                    if (existing && existing.items) {
+                        setDataA(existing.items);
+                    }
                 } catch (e) {
                     // ignore
                 }
@@ -136,82 +137,7 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
         await Promise.all([promiseA, promiseB]);
     };
 
-    // Calculate Comparison
-    const comparisonRows = useMemo(() => {
-        if (!dataA && !dataB) return [];
-        
-        // Helper to group items by key
-        const groupByKey = (items: typeof dataA) => {
-            const map = new Map<string, typeof items>();
-            if (!items) return map;
-            
-            items.forEach(item => {
-                const key = item.source_key || "(no key)";
-                if (!map.has(key)) {
-                    map.set(key, []);
-                }
-                map.get(key)!.push(item);
-            });
-            return map;
-        };
 
-        const mapA = groupByKey(dataA);
-        const mapB = groupByKey(dataB);
-        
-        // Union of all keys
-        const allKeys = new Set([...(mapA.keys()), ...(mapB.keys())]);
-        
-        const rows: {
-            key: string;
-            valA: string;
-            valB: string;
-            isMatch: boolean;
-            lineNumbers: number[];
-            sortKey: number;
-        }[] = [];
-
-        allKeys.forEach(key => {
-            const itemsA = mapA.get(key) || [];
-            const itemsB = mapB.get(key) || [];
-            
-            // Align by index (zip)
-            const maxLength = Math.max(itemsA.length, itemsB.length);
-            
-            for (let i = 0; i < maxLength; i++) {
-                const itemA = itemsA[i];
-                const itemB = itemsB[i];
-                
-                const valA = itemA ? itemA.value : undefined;
-                const valB = itemB ? itemB.value : undefined;
-                
-                const isMatch = valA === valB;
-                const displayA = valA === undefined ? "(missing)" : valA;
-                const displayB = valB === undefined ? "(missing)" : valB;
-                
-                // Collect line numbers for highlighting
-                const linesA = itemA?.line_numbers || [];
-                const linesB = itemB?.line_numbers || [];
-                const allLines = Array.from(new Set([...linesA, ...linesB])).sort((a,b) => a - b);
-                
-                // Determine sort key (min line number -> document order)
-                // Default to infinity if no lines (bottom of list)
-                const minLine = allLines.length > 0 ? Math.min(...allLines) : Number.MAX_SAFE_INTEGER;
-
-                rows.push({
-                    key: key + (maxLength > 1 ? ` [${i+1}]` : ""), // Distinguish duplicates if needed visually
-                    valA: displayA,
-                    valB: displayB,
-                    isMatch,
-                    lineNumbers: allLines,
-                    sortKey: minLine
-                });
-            }
-        });
-        
-        // Sort by line number (document order)
-        return rows.sort((a, b) => a.sortKey - b.sortKey);
-        
-    }, [dataA, dataB]);
 
     const filteredRows = useMemo(() => {
         if (filter === "all") return comparisonRows;

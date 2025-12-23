@@ -1,5 +1,14 @@
 import { StructuredItem } from '@/lib/api';
-import { createContext, ReactNode, useContext, useEffect, useState } from 'react';
+import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
+
+export interface ComparisonRow {
+    key: string;
+    valA: string;
+    valB: string;
+    isMatch: boolean;
+    lineNumbers: number[];
+    sortKey: number;
+}
 
 interface ComparisonContextType {
     searchQuery: string;
@@ -22,6 +31,7 @@ interface ComparisonContextType {
     filter: "all" | "mismatch" | "match";
     setFilter: (filter: "all" | "mismatch" | "match") => void;
     resetComparisonState: () => void;
+    comparisonRows: ComparisonRow[];
 }
 
 const ComparisonContext = createContext<ComparisonContextType | undefined>(undefined);
@@ -83,6 +93,77 @@ export function ComparisonProvider({ children, whisperHash }: { children: ReactN
         }
     };
 
+    // Calculate Comparison Rows centrally
+    const comparisonRows = useMemo(() => {
+        if (!dataA && !dataB) return [];
+
+        // Helper to group items by key
+        const groupByKey = (items: StructuredItem[] | null) => {
+            const map = new Map<string, StructuredItem[]>();
+            if (!items) return map;
+
+            items.forEach(item => {
+                const key = item.source_key || "(no key)";
+                if (!map.has(key)) {
+                    map.set(key, []);
+                }
+                map.get(key)!.push(item);
+            });
+            return map;
+        };
+
+        const mapA = groupByKey(dataA);
+        const mapB = groupByKey(dataB);
+
+        // Union of all keys
+        const allKeys = new Set([...(mapA.keys()), ...(mapB.keys())]);
+
+        const rows: ComparisonRow[] = [];
+
+        allKeys.forEach(key => {
+            const itemsA = mapA.get(key) || [];
+            const itemsB = mapB.get(key) || [];
+
+            // Align by index (zip)
+            const maxLength = Math.max(itemsA.length, itemsB.length);
+
+            for (let i = 0; i < maxLength; i++) {
+                const itemA = itemsA[i];
+                const itemB = itemsB[i];
+
+                const valA = itemA ? itemA.value : undefined;
+                const valB = itemB ? itemB.value : undefined;
+
+                // Simple string comparison for now.
+                // Note: valA/valB can be numeric/boolean but 'value' is usually string in StructuredItem
+                const isMatch = valA == valB; 
+                const displayA = valA === undefined ? "(missing)" : String(valA);
+                const displayB = valB === undefined ? "(missing)" : String(valB);
+
+                // Collect line numbers for highlighting
+                const linesA = itemA?.line_numbers || [];
+                const linesB = itemB?.line_numbers || [];
+                const allLines = Array.from(new Set([...linesA, ...linesB])).sort((a, b) => a - b);
+
+                // Determine sort key (min line number -> document order)
+                const minLine = allLines.length > 0 ? Math.min(...allLines) : Number.MAX_SAFE_INTEGER;
+
+                rows.push({
+                    key: key + (maxLength > 1 ? ` [${i + 1}]` : ""), // Distinguish duplicates
+                    valA: displayA,
+                    valB: displayB,
+                    isMatch,
+                    lineNumbers: allLines,
+                    sortKey: minLine
+                });
+            }
+        });
+
+        // Sort by line number (document order)
+        return rows.sort((a, b) => a.sortKey - b.sortKey);
+
+    }, [dataA, dataB]);
+
     const value = {
         searchQuery: "", // Placeholder if needed or remove
         modelA,
@@ -103,7 +184,8 @@ export function ComparisonProvider({ children, whisperHash }: { children: ReactN
         setDataB,
         filter,
         setFilter,
-        resetComparisonState
+        resetComparisonState,
+        comparisonRows
     };
 
     return (

@@ -18,6 +18,7 @@ import { ComparisonTab } from "@/components/workspace/ComparisonTab";
 import { ExtractedTextPanel } from "@/components/workspace/ExtractedTextPanel";
 import { FileSelectorDropdown } from "@/components/workspace/FileSelectorDropdown";
 import { PDFViewerWrapper } from "@/components/workspace/PDFViewerWrapper";
+import { ResultTab } from "@/components/workspace/ResultTab";
 import { StructuredTablePanel } from "@/components/workspace/StructuredTablePanel";
 import { TwoPaneLayout } from "@/components/workspace/TwoPaneLayout";
 import { ComparisonProvider } from "@/context/ComparisonContext";
@@ -29,7 +30,7 @@ import { cn } from "@/lib/utils";
 import { BoundingBox, ExtractedTable, LayoutText } from "@/types/document";
 import { getStRows } from "@/utils/api";
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, Download, Edit2, FileText, GitCompare, Hash, Loader2, Maximize2, RotateCcw, Search, Sparkles, Table, Trash2, X } from "lucide-react";
+import { Check, CheckCircle2, Download, Edit2, FileText, GitCompare, Hash, Loader2, Maximize2, RotateCcw, Search, Sparkles, Table, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
@@ -42,6 +43,7 @@ const tabs: { id: TabType; label: string; icon: typeof FileText }[] = [
   { id: "qa", label: "QA", icon: Sparkles },
   { id: "st", label: "ST", icon: Table },
   { id: "compare", label: "Compare Models", icon: GitCompare },
+  { id: "result", label: "Result", icon: CheckCircle2 },
 ];
 
 export default function Workspace() {
@@ -1920,6 +1922,8 @@ export default function Workspace() {
            </div>
         );
 
+      case "result":
+        return <ResultTab onHighlight={(lines) => handleStructuredHighlight(lines, true)} />;
       case "compare":
         return <ComparisonTab whisperHash={whisperHash} onHighlight={(lines) => handleStructuredHighlight(lines, true)} />;
     }
