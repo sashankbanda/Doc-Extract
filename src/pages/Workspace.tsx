@@ -1963,7 +1963,7 @@ export default function Workspace() {
 
   return (
     <div className="min-h-screen pt-16">
-      <ComparisonProvider>
+      <ComparisonProvider whisperHash={whisperHash}>
       <TwoPaneLayout
         leftPane={
           isPdf ? (
