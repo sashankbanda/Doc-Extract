@@ -19,7 +19,7 @@ import { useComparisonContext } from "@/context/ComparisonContext";
 import { getStructuredDocument, structureDocument } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Loader2, Play, Settings2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 // Available models
@@ -55,6 +55,23 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
     
     const [loadingA, setLoadingA] = useState(false);
     const [loadingB, setLoadingB] = useState(false);
+
+    const containerRef = useRef<HTMLDivElement>(null);
+    const [isNarrow, setIsNarrow] = useState(false);
+
+    useEffect(() => {
+        if (!containerRef.current) return;
+        
+        const observer = new ResizeObserver((entries) => {
+            for (const entry of entries) {
+                // Determine if we are "narrow" (like standard sm/md breakpoint)
+                setIsNarrow(entry.contentRect.width < 640);
+            }
+        });
+        
+        observer.observe(containerRef.current);
+        return () => observer.disconnect();
+    }, []);
     
     // Load initial data for Model A if available (Baseline)
     useEffect(() => {
@@ -204,7 +221,7 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
     }, [comparisonRows, filter]);
 
     return (
-        <div className="flex flex-col h-full bg-background/50">
+        <div ref={containerRef} className="flex flex-col h-full bg-background/50">
             {/* Header / Controls */}
             <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 p-4 space-y-4">
                  <Accordion type="single" collapsible className="w-full border rounded-lg bg-card" defaultValue="settings">
@@ -219,7 +236,7 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
                             </div>
                         </AccordionTrigger>
                         <AccordionContent className="px-4 pb-4 pt-0">
-                           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-4">
+                           <div className={cn("grid gap-6 pt-4", isNarrow ? "grid-cols-1" : "grid-cols-2")}>
                                 {/* Model Selection */}
                                 <div className="space-y-4 border rounded-md p-4 bg-muted/20">
                                     <div className="flex items-center justify-between">
@@ -230,7 +247,7 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
                                         </Button>
                                     </div>
                                     
-                                    <div className="grid grid-cols-2 gap-4">
+                                    <div className={cn("grid gap-4", isNarrow ? "grid-cols-1" : "grid-cols-2")}>
                                         {/* Model A */}
                                         <div className="space-y-2">
                                             <div className="flex items-center justify-between">
@@ -323,7 +340,10 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
             </div>
             
             {/* Split View Results */}
-            <div className="flex-1 overflow-hidden grid grid-cols-2 divide-x">
+            <div className={cn(
+                "flex-1 overflow-hidden grid",
+                isNarrow ? "grid-cols-1 grid-rows-2 divide-y" : "grid-cols-2 divide-x"
+            )}>
                 {/* Panel A */}
                 <ScrollArea className="h-full bg-card/30">
                     <div className="p-4 space-y-1">

@@ -1984,7 +1984,7 @@ export default function Workspace() {
           )
         }
         rightPane={
-          <div className="h-full flex flex-col" ref={rightPaneRef}>
+          <div className="h-full flex flex-col bg-background" ref={rightPaneRef}>
             {/* Header with file selector */}
             <div className="flex flex-wrap items-center justify-between gap-3 p-4 border-b border-border/50">
               <div className="flex items-center gap-2 flex-1 min-w-0">
