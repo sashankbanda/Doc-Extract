@@ -1921,7 +1921,7 @@ export default function Workspace() {
         );
 
       case "compare":
-        return <ComparisonTab whisperHash={whisperHash} />;
+        return <ComparisonTab whisperHash={whisperHash} onHighlight={(lines) => handleStructuredHighlight(lines, true)} />;
     }
   };
 

@@ -40,9 +40,7 @@ interface ComparisonTabProps {
     whisperHash: string | null;
 }
 
-
-
-export function ComparisonTab({ whisperHash }: ComparisonTabProps) {
+export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps & { onHighlight?: (lines: number[]) => void }) {
     const {
         modelA, setModelA,
         modelB, setModelB,
@@ -125,31 +123,76 @@ export function ComparisonTab({ whisperHash }: ComparisonTabProps) {
     const comparisonRows = useMemo(() => {
         if (!dataA && !dataB) return [];
         
-        const mapA = new Map(dataA?.map(i => [i.source_key, i.value]));
-        const mapB = new Map(dataB?.map(i => [i.source_key, i.value]));
+        // Helper to group items by key
+        const groupByKey = (items: typeof dataA) => {
+            const map = new Map<string, typeof items>();
+            if (!items) return map;
+            
+            items.forEach(item => {
+                const key = item.source_key || "(no key)";
+                if (!map.has(key)) {
+                    map.set(key, []);
+                }
+                map.get(key)!.push(item);
+            });
+            return map;
+        };
+
+        const mapA = groupByKey(dataA);
+        const mapB = groupByKey(dataB);
         
         // Union of all keys
         const allKeys = new Set([...(mapA.keys()), ...(mapB.keys())]);
         
-        const rows = Array.from(allKeys).map(key => {
-            const valA = mapA.get(key);
-            const valB = mapB.get(key);
-            const isMatch = valA === valB;
-            // Handle missing values
-            const displayA = valA === undefined ? "(missing)" : valA;
-            const displayB = valB === undefined ? "(missing)" : valB;
+        const rows: {
+            key: string;
+            valA: string;
+            valB: string;
+            isMatch: boolean;
+            lineNumbers: number[];
+            sortKey: number;
+        }[] = [];
+
+        allKeys.forEach(key => {
+            const itemsA = mapA.get(key) || [];
+            const itemsB = mapB.get(key) || [];
             
-            return {
-                key,
-                valA: displayA,
-                valB: displayB,
-                isMatch
-            };
+            // Align by index (zip)
+            const maxLength = Math.max(itemsA.length, itemsB.length);
+            
+            for (let i = 0; i < maxLength; i++) {
+                const itemA = itemsA[i];
+                const itemB = itemsB[i];
+                
+                const valA = itemA ? itemA.value : undefined;
+                const valB = itemB ? itemB.value : undefined;
+                
+                const isMatch = valA === valB;
+                const displayA = valA === undefined ? "(missing)" : valA;
+                const displayB = valB === undefined ? "(missing)" : valB;
+                
+                // Collect line numbers for highlighting
+                const linesA = itemA?.line_numbers || [];
+                const linesB = itemB?.line_numbers || [];
+                const allLines = Array.from(new Set([...linesA, ...linesB])).sort((a,b) => a - b);
+                
+                // Determine sort key (min line number -> document order)
+                // Default to infinity if no lines (bottom of list)
+                const minLine = allLines.length > 0 ? Math.min(...allLines) : Number.MAX_SAFE_INTEGER;
+
+                rows.push({
+                    key: key + (maxLength > 1 ? ` [${i+1}]` : ""), // Distinguish duplicates if needed visually
+                    valA: displayA,
+                    valB: displayB,
+                    isMatch,
+                    lineNumbers: allLines,
+                    sortKey: minLine
+                });
+            }
         });
         
-        // Sort by key (or maybe better by PDF order if we had line numbers)
-        // For now alphabetical by key is simple
-        return rows.sort((a, b) => a.key.localeCompare(b.key));
+        // Sort by line number (document order)
+        return rows.sort((a, b) => a.sortKey - b.sortKey);
         
     }, [dataA, dataB]);
 
@@ -290,11 +333,20 @@ export function ComparisonTab({ whisperHash }: ComparisonTabProps) {
                             </div>
                         )}
                         {filteredRows.map((row, i) => (
-                           <div key={`a-${i}`} className={cn(
-                               "p-3 rounded border text-sm grid gap-1",
-                               !row.isMatch && "border-destructive/20 bg-destructive/5"
-                           )}>
-                               <div className="font-semibold text-xs text-muted-foreground uppercase tracking-wider">{row.key}</div>
+                           <div 
+                                key={`a-${i}`} 
+                                onClick={() => onHighlight?.(row.lineNumbers)}
+                                className={cn(
+                                   "p-3 rounded border text-sm grid gap-1 cursor-pointer transition-colors hover:bg-muted/50",
+                                   !row.isMatch && "border-destructive/20 bg-destructive/5"
+                               )}
+                           >
+                               <div className="flex justify-between items-center">
+                                    <div className="font-semibold text-xs text-muted-foreground uppercase tracking-wider">{row.key}</div>
+                                    {row.sortKey !== Number.MAX_SAFE_INTEGER && (
+                                        <div className="text-[10px] text-muted-foreground opacity-50">L{row.sortKey}</div>
+                                    )}
+                               </div>
                                <div className="font-medium break-words">{row.valA}</div>
                            </div> 
                         ))}
@@ -310,11 +362,20 @@ export function ComparisonTab({ whisperHash }: ComparisonTabProps) {
                             </div>
                         )}
                          {filteredRows.map((row, i) => (
-                           <div key={`b-${i}`} className={cn(
-                               "p-3 rounded border text-sm grid gap-1",
-                               !row.isMatch && "border-destructive/20 bg-destructive/5"
-                           )}>
-                               <div className="font-semibold text-xs text-muted-foreground uppercase tracking-wider">{row.key}</div>
+                           <div 
+                                key={`b-${i}`} 
+                                onClick={() => onHighlight?.(row.lineNumbers)}
+                                className={cn(
+                                   "p-3 rounded border text-sm grid gap-1 cursor-pointer transition-colors hover:bg-muted/50",
+                                   !row.isMatch && "border-destructive/20 bg-destructive/5"
+                               )}
+                           >
+                                <div className="flex justify-between items-center">
+                                    <div className="font-semibold text-xs text-muted-foreground uppercase tracking-wider">{row.key}</div>
+                                    {row.sortKey !== Number.MAX_SAFE_INTEGER && (
+                                        <div className="text-[10px] text-muted-foreground opacity-50">L{row.sortKey}</div>
+                                    )}
+                               </div>
                                <div className="font-medium break-words">{row.valB}</div>
                            </div> 
                         ))}
