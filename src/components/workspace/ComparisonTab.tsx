@@ -18,7 +18,7 @@ import {
 import { useComparisonContext } from "@/context/ComparisonContext";
 import { getStructuredDocument, structureDocument } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { Loader2, Play, Settings2 } from "lucide-react";
+import { Check, CheckCircle2, Edit2, Loader2, Play, Settings2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -40,6 +40,122 @@ interface ComparisonTabProps {
     whisperHash: string | null;
 }
 
+// Sub-component for a single cell (Model A or B)
+function ComparisonCell({ 
+    model, 
+    index, 
+    uniqueKey, // For approval (includes suffix)
+    rawKey,    // For editing (actual key)
+    value, 
+    isMatch, 
+    isApproved,
+    onApprove, 
+    onUpdate 
+}: {
+    model: 'A' | 'B';
+    index?: number;
+    uniqueKey: string;
+    rawKey: string;
+    value: string;
+    isMatch: boolean;
+    isApproved: boolean;
+    onApprove: (key: string, val: string) => void;
+    onUpdate: (model: 'A' | 'B', index: number, k: string, v: string) => void;
+}) {
+    const [isEditing, setIsEditing] = useState(false);
+    const [editKey, setEditKey] = useState(rawKey);
+    const [editVal, setEditVal] = useState(value);
+
+    // Update local state when prop changes (unless editing)
+    useEffect(() => {
+        if (!isEditing) {
+            setEditKey(rawKey);
+            setEditVal(value);
+        }
+    }, [rawKey, value, isEditing]);
+
+    const handleSave = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (index === undefined) return;
+        onUpdate(model, index, editKey, editVal);
+        setIsEditing(false);
+    };
+
+    const handleCancel = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setIsEditing(false);
+        setEditKey(rawKey);
+        setEditVal(value);
+    };
+
+    const handleApprove = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        onApprove(uniqueKey, value);
+    };
+
+    if (isEditing) {
+        return (
+            <div className="flex flex-col gap-2 p-1" onClick={e => e.stopPropagation()}>
+                <Input 
+                    value={editKey} 
+                    onChange={e => setEditKey(e.target.value)} 
+                    className="h-6 text-xs" 
+                    placeholder="Key"
+                />
+                <textarea 
+                    value={editVal} 
+                    onChange={e => setEditVal(e.target.value)}
+                    className="flex w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 min-h-[60px]"
+                />
+                <div className="flex gap-2 justify-end">
+                     <Button size="icon" variant="ghost" className="h-6 w-6 text-green-600 hover:text-green-700 hover:bg-green-100" onClick={handleSave} title="Save">
+                        <Check className="w-4 h-4" />
+                    </Button>
+                    <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive hover:text-destructive hover:bg-red-100" onClick={handleCancel} title="Cancel">
+                        <X className="w-4 h-4" />
+                    </Button>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="group relative pr-16 min-h-[2rem] flex items-center">
+            <span className={cn("break-words", isApproved && "font-bold text-green-700")}>
+                {value}
+                {isApproved && <CheckCircle2 className="w-3 h-3 inline-block ml-1 opacity-70" />}
+            </span>
+            
+            {/* Actions (Visible on hover) */}
+            <div className="absolute right-0 top-0 hidden group-hover:flex items-center bg-background/80 backdrop-blur-sm rounded-md shadow-sm border">
+                <Button 
+                    size="icon" 
+                    variant="ghost" 
+                    className={cn("h-7 w-7", isApproved ? "text-green-600" : "text-muted-foreground hover:text-green-600")}
+                    onClick={handleApprove}
+                    title="Approve this value"
+                >
+                    <CheckCircle2 className="w-4 h-4" />
+                </Button>
+                {index !== undefined && (
+                    <Button 
+                        size="icon" 
+                        variant="ghost" 
+                        className="h-7 w-7 text-muted-foreground hover:text-blue-600"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setIsEditing(true);
+                        }}
+                        title="Edit"
+                    >
+                        <Edit2 className="w-3.5 h-3.5" />
+                    </Button>
+                )}
+            </div>
+        </div>
+    );
+}
+
 export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps & { onHighlight?: (lines: number[]) => void }) {
     const {
         modelA, setModelA,
@@ -51,8 +167,14 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
         dataA, setDataA,
         dataB, setDataB,
         filter, setFilter,
-        comparisonRows
+        comparisonRows,
+        approvedItems, 
+        approveItem,
+        updateItem
     } = useComparisonContext();
+    
+    // ... (rest of local state) ...
+    // Note: I will only replace the rendering part, but since this tool replaces chunks, I need the context destructuring to be updated too.
     
     const [loadingA, setLoadingA] = useState(false);
     const [loadingB, setLoadingB] = useState(false);
@@ -62,14 +184,11 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
 
     useEffect(() => {
         if (!containerRef.current) return;
-        
         const observer = new ResizeObserver((entries) => {
             for (const entry of entries) {
-                // Determine if we are "narrow" (like standard sm/md breakpoint)
                 setIsNarrow(entry.contentRect.width < 640);
             }
         });
-        
         observer.observe(containerRef.current);
         return () => observer.disconnect();
     }, []);
@@ -137,8 +256,6 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
         await Promise.all([promiseA, promiseB]);
     };
 
-
-
     const filteredRows = useMemo(() => {
         if (filter === "all") return comparisonRows;
         if (filter === "mismatch") return comparisonRows.filter(r => !r.isMatch);
@@ -148,8 +265,11 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
 
     return (
         <div ref={containerRef} className="flex flex-col h-full bg-background/50">
-            {/* Header / Controls */}
+           {/* ... Header ... */}
+           {/* (I am skipping replacing the header code blocks to avoid huge diffs, will target the specific container) */}
             <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 p-4 space-y-4">
+                 {/* ... content of header ... */}
+                 {/* I will invoke replace_file_content separately for the header if needed, but the main change is the ScrollArea content */}
                  <Accordion type="single" collapsible className="w-full border rounded-lg bg-card" defaultValue="settings">
                     <AccordionItem value="settings" className="border-none">
                         <AccordionTrigger className="px-4 py-2 hover:no-underline">
@@ -293,7 +413,17 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
                                         <div className="text-[10px] text-muted-foreground opacity-50">L{row.sortKey}</div>
                                     )}
                                </div>
-                               <div className="font-medium break-words">{row.valA}</div>
+                               <ComparisonCell 
+                                    model="A"
+                                    index={row.indexA}
+                                    uniqueKey={row.key}
+                                    rawKey={row.key.replace(/ \[\d+\]$/, '')}
+                                    value={row.valA}
+                                    isMatch={row.isMatch}
+                                    isApproved={approvedItems[row.key] === row.valA}
+                                    onApprove={approveItem}
+                                    onUpdate={updateItem}
+                               />
                            </div> 
                         ))}
                     </div>
@@ -322,7 +452,17 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
                                         <div className="text-[10px] text-muted-foreground opacity-50">L{row.sortKey}</div>
                                     )}
                                </div>
-                               <div className="font-medium break-words">{row.valB}</div>
+                               <ComparisonCell 
+                                    model="B"
+                                    index={row.indexB}
+                                    uniqueKey={row.key}
+                                    rawKey={row.key.replace(/ \[\d+\]$/, '')}
+                                    value={row.valB}
+                                    isMatch={row.isMatch}
+                                    isApproved={approvedItems[row.key] === row.valB}
+                                    onApprove={approveItem}
+                                    onUpdate={updateItem}
+                               />
                            </div> 
                         ))}
                     </div>

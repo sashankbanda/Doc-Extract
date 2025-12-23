@@ -8,6 +8,9 @@ export interface ComparisonRow {
     isMatch: boolean;
     lineNumbers: number[];
     sortKey: number;
+    // Source Indices for editing
+    indexA?: number;
+    indexB?: number;
 }
 
 interface ComparisonContextType {
@@ -32,6 +35,11 @@ interface ComparisonContextType {
     setFilter: (filter: "all" | "mismatch" | "match") => void;
     resetComparisonState: () => void;
     comparisonRows: ComparisonRow[];
+    // Approval State
+    approvedItems: Record<string, string>; // SourceKey -> ApprovedValue
+    approveItem: (key: string, value: string) => void;
+    // Update Logic
+    updateItem: (model: 'A' | 'B', index: number, newKey: string, newValue: string) => void;
 }
 
 const ComparisonContext = createContext<ComparisonContextType | undefined>(undefined);
@@ -64,6 +72,9 @@ export function ComparisonProvider({ children, whisperHash }: { children: ReactN
     
     const [filter, setFilter] = useState<"all" | "mismatch" | "match">(() => loadState("filter", "all"));
 
+    // Keyed by source_key. Stores the definitive value.
+    const [approvedItems, setApprovedItems] = useState<Record<string, string>>(() => loadState("approvedItems", {}));
+
     // Save state on change
     useEffect(() => {
         if (!whisperHash) return;
@@ -79,7 +90,8 @@ export function ComparisonProvider({ children, whisperHash }: { children: ReactN
         save("dataA", dataA);
         save("dataB", dataB);
         save("filter", filter);
-    }, [whisperHash, modelA, modelB, customModelA, customModelB, isCustomA, isCustomB, dataA, dataB, filter]);
+        save("approvedItems", approvedItems);
+    }, [whisperHash, modelA, modelB, customModelA, customModelB, isCustomA, isCustomB, dataA, dataB, filter, approvedItems]);
 
 
     const resetComparisonState = () => {
@@ -97,17 +109,18 @@ export function ComparisonProvider({ children, whisperHash }: { children: ReactN
     const comparisonRows = useMemo(() => {
         if (!dataA && !dataB) return [];
 
-        // Helper to group items by key
+        // Helper to group items by key. 
+        // We also need the original index to allow editing.
         const groupByKey = (items: StructuredItem[] | null) => {
-            const map = new Map<string, StructuredItem[]>();
+            const map = new Map<string, { item: StructuredItem, originalIndex: number }[]>();
             if (!items) return map;
 
-            items.forEach(item => {
+            items.forEach((item, idx) => {
                 const key = item.source_key || "(no key)";
                 if (!map.has(key)) {
                     map.set(key, []);
                 }
-                map.get(key)!.push(item);
+                map.get(key)!.push({ item, originalIndex: idx });
             });
             return map;
         };
@@ -128,8 +141,11 @@ export function ComparisonProvider({ children, whisperHash }: { children: ReactN
             const maxLength = Math.max(itemsA.length, itemsB.length);
 
             for (let i = 0; i < maxLength; i++) {
-                const itemA = itemsA[i];
-                const itemB = itemsB[i];
+                const entryA = itemsA[i];
+                const entryB = itemsB[i];
+
+                const itemA = entryA?.item;
+                const itemB = entryB?.item;
 
                 const valA = itemA ? itemA.value : undefined;
                 const valB = itemB ? itemB.value : undefined;
@@ -154,7 +170,9 @@ export function ComparisonProvider({ children, whisperHash }: { children: ReactN
                     valB: displayB,
                     isMatch,
                     lineNumbers: allLines,
-                    sortKey: minLine
+                    sortKey: minLine,
+                    indexA: entryA?.originalIndex,
+                    indexB: entryB?.originalIndex
                 });
             }
         });
@@ -163,6 +181,44 @@ export function ComparisonProvider({ children, whisperHash }: { children: ReactN
         return rows.sort((a, b) => a.sortKey - b.sortKey);
 
     }, [dataA, dataB]);
+
+    const approveItem = (key: string, value: string) => {
+        setApprovedItems(prev => ({
+            ...prev,
+            [key]: value
+        }));
+    };
+
+    const updateItem = (model: 'A' | 'B', index: number, newKey: string, newValue: string) => {
+        const updateData = (prevData: StructuredItem[] | null) => {
+            if (!prevData) return null;
+            // We need to find the item. The comparison logic groups by keys, but here we might have the original index or need to find it.
+            // However, the cleanest way (since we render aligned rows) is if we know the item's identity. 
+            // BUT, our comparisonRows don't strictly Map 1:1 to indices if things are out of order.
+            // Actually, the Comparison Tab loop iterates: 
+            //    itemsA[i] which gives us the actual StructuredItem object. 
+            // If we find that object in the main array, we can update it.
+            
+            // IMPROVEMENT: ResultTab/ComparisonTab should pass the index relative to the source data array?
+            // "index" here will be treated as the index in the *source array* (dataA or dataB).
+            
+            const newData = [...prevData];
+            if (index >= 0 && index < newData.length) {
+                newData[index] = {
+                    ...newData[index],
+                    source_key: newKey,
+                    value: newValue
+                };
+            }
+            return newData;
+        };
+
+        if (model === 'A') {
+            setDataA(updateData(dataA));
+        } else {
+            setDataB(updateData(dataB));
+        }
+    };
 
     const value = {
         searchQuery: "", // Placeholder if needed or remove
@@ -185,7 +241,10 @@ export function ComparisonProvider({ children, whisperHash }: { children: ReactN
         filter,
         setFilter,
         resetComparisonState,
-        comparisonRows
+        comparisonRows,
+        approvedItems,
+        approveItem,
+        updateItem
     };
 
     return (

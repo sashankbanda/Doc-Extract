@@ -9,7 +9,7 @@ interface ResultTabProps {
 }
 
 export function ResultTab({ onHighlight }: ResultTabProps) {
-    const { comparisonRows, dataA, dataB } = useComparisonContext();
+    const { comparisonRows, dataA, dataB, approvedItems } = useComparisonContext();
 
     if (!dataA && !dataB) {
         return (
@@ -24,7 +24,7 @@ export function ResultTab({ onHighlight }: ResultTabProps) {
         <div className="flex flex-col h-full bg-background/50">
             <ScrollArea className="flex-1 h-full"> 
                 <div className="p-4">
-                    <div className="rounded-md border bg-card">
+                     <div className="rounded-md border bg-card">
                         <Table>
                             <TableHeader>
                                 <TableRow>
@@ -35,23 +35,26 @@ export function ResultTab({ onHighlight }: ResultTabProps) {
                             </TableHeader>
                             <TableBody>
                                 {comparisonRows.map((row, i) => {
-                                    // Logic: If mismatch, show empty/null. If match, show the value (valA or valB are same).
-                                    // Note: comparisonRows.valA already handles "(missing)" text, but here user specifically asked for "null" behavior for mismatches.
-                                    // Actually, let's look at the requirement: "mismatched ones keep as null for now".
+                                    // Logic: 
+                                    // 1. If Approved -> Show Approved Value
+                                    // 2. If Match -> Show Value
+                                    // 3. Else -> "null"
                                     
-                                    // Our context logic for valA/valB returns "(missing)" if undefined, or the value strings.
-                                    // But we have row.isMatch.
+                                    const approvedVal = approvedItems[row.key];
                                     
                                     let displayValue = "";
                                     let isMiss = false;
+                                    let isApproved = false;
                                     
-                                    if (!row.isMatch) {
-                                        displayValue = "null"; // Explicitly requested "null"
+                                    if (approvedVal !== undefined) {
+                                        // Approved override
+                                        displayValue = approvedVal;
+                                        isApproved = true;
+                                    } else if (!row.isMatch) {
+                                        displayValue = "null"; 
                                         isMiss = true;
                                     } else {
-                                        // It's a match, so valA == valB. 
-                                        // However, if both are "(missing)", then it's effectively empty. 
-                                        // But if isMatch is true, they are equal.
+                                        // Match
                                         displayValue = row.valA;
                                     }
 
@@ -60,14 +63,16 @@ export function ResultTab({ onHighlight }: ResultTabProps) {
                                             key={i} 
                                             className={cn(
                                                 "cursor-pointer hover:bg-muted/50 transition-colors",
-                                                isMiss && "text-muted-foreground italic bg-destructive/5"
+                                                isMiss && "text-muted-foreground italic bg-destructive/5",
+                                                isApproved && "bg-green-50/50"
                                             )}
                                             onClick={() => onHighlight?.(row.lineNumbers)}
                                         >
                                             <TableCell className="font-medium align-top">
                                                 {row.key}
+                                                {isApproved && <span className="ml-2 text-green-600 text-[10px] uppercase border border-green-200 px-1 rounded bg-green-50">Approved</span>}
                                             </TableCell>
-                                            <TableCell className="align-top whitespace-pre-wrap break-words min-w-0">
+                                            <TableCell className={cn("align-top whitespace-pre-wrap break-words min-w-0", isApproved && "font-medium text-green-900")}>
                                                 {displayValue}
                                             </TableCell>
                                              <TableCell className="align-top text-right text-xs text-muted-foreground">
