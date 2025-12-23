@@ -41,3 +41,6 @@ from backend.routes import admin, keys
 app.include_router(admin.router)
 app.include_router(keys.router)
 
+from backend.routes import export
+app.include_router(export.router)
+

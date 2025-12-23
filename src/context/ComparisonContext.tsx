@@ -40,6 +40,7 @@ interface ComparisonContextType {
     approveItem: (key: string, value: string) => void;
     // Update Logic
     updateItem: (model: 'A' | 'B', index: number, newKey: string, newValue: string) => void;
+    whisperHash: string | undefined | null;
 }
 
 const ComparisonContext = createContext<ComparisonContextType | undefined>(undefined);
@@ -244,7 +245,8 @@ export function ComparisonProvider({ children, whisperHash }: { children: ReactN
         comparisonRows,
         approvedItems,
         approveItem,
-        updateItem
+        updateItem,
+        whisperHash
     };
 
     return (
