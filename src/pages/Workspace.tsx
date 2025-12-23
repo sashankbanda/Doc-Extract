@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ComparisonTab } from "@/components/workspace/ComparisonTab";
 import { ExtractedTextPanel } from "@/components/workspace/ExtractedTextPanel";
 import { FileSelectorDropdown } from "@/components/workspace/FileSelectorDropdown";
 import { PDFViewerWrapper } from "@/components/workspace/PDFViewerWrapper";
@@ -27,11 +28,11 @@ import { cn } from "@/lib/utils";
 import { BoundingBox, ExtractedTable, LayoutText } from "@/types/document";
 import { getStRows } from "@/utils/api";
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, Download, Edit2, FileText, Hash, Loader2, Maximize2, RotateCcw, Search, Sparkles, Table, Trash2, X } from "lucide-react";
+import { Check, Download, Edit2, FileText, GitCompare, Hash, Loader2, Maximize2, RotateCcw, Search, Sparkles, Table, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
-type TabType = "text" | "tables" | "cn" | "qa" | "st";
+type TabType = "text" | "tables" | "cn" | "qa" | "st" | "compare";
 
 const tabs: { id: TabType; label: string; icon: typeof FileText }[] = [
   { id: "text", label: "Raw Text", icon: FileText },
@@ -39,6 +40,7 @@ const tabs: { id: TabType; label: string; icon: typeof FileText }[] = [
   { id: "cn", label: "CN", icon: Hash },
   { id: "qa", label: "QA", icon: Sparkles },
   { id: "st", label: "ST", icon: Table },
+  { id: "compare", label: "Compare Models", icon: GitCompare },
 ];
 
 export default function Workspace() {
@@ -1917,6 +1919,8 @@ export default function Workspace() {
            </div>
         );
 
+      case "compare":
+        return <ComparisonTab whisperHash={whisperHash} />;
     }
   };
 

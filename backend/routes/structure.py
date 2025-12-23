@@ -31,7 +31,7 @@ async def get_structured_document(whisper_hash: str):
 
 
 @router.post("/structure/{whisper_hash}")
-async def structure_document(whisper_hash: str):
+async def structure_document(whisper_hash: str, model_id: Optional[str] = None, save: bool = True):
     stored = file_store.get_json_output(whisper_hash, suffix="")
     if not stored:
         raise HTTPException(status_code=404, detail="Whisper result not found")
@@ -44,7 +44,7 @@ async def structure_document(whisper_hash: str):
         )
 
     try:
-        structured = await llm_service.structure_document(raw_text, line_metadata)
+        structured = await llm_service.structure_document(raw_text, line_metadata, model_id=model_id)
     except Exception as exc:
         raise HTTPException(
             status_code=500, detail=f"Failed to structure document: {exc}"
@@ -60,31 +60,43 @@ async def structure_document(whisper_hash: str):
         "metadata": stored.get("metadata"),
     }
 
-    # Save flat structured data
-    file_store.save_json_output(whisper_hash, output_payload, suffix="_structured")
-
-    # Build and save ST-style rows for downstream table construction (ST tab, exports, etc.)
-    try:
-        st_rows, debug_info = build_st_rows(items, debug=True)
-        st_payload = {
-            "whisper_hash": whisper_hash,
-            "rows": st_rows,
-        }
-        file_store.save_json_output(whisper_hash, st_payload, suffix="_st")
+    if save:
+        # Determine suffix based on model_id to avoid overwriting main file during comparisons
+        suffix_base = "_structured"
+        st_suffix_base = "_st"
+        debug_suffix_base = "_st_debug"
         
-        # Save debug info for troubleshooting
-        debug_payload = {
-            "whisper_hash": whisper_hash,
-            "debug_info": debug_info,
-        }
-        file_store.save_json_output(whisper_hash, debug_payload, suffix="_st_debug")
-    except Exception as exc:
-        # Do not fail the main structuring endpoint if ST building has issues
-        # Just log and continue.
-        import logging
-        logging.getLogger(__name__).warning(
-            "Failed to build ST rows for %s: %s", whisper_hash, exc
-        )
+        if model_id:
+            # Sanitize model_id for filename (e.g. "groq/llama-3" -> "groq_llama-3")
+            safe_model_id = model_id.replace("/", "_").replace(":", "").replace(" ", "_")
+            suffix_base = f"_structured_{safe_model_id}"
+            st_suffix_base = f"_st_{safe_model_id}"
+            debug_suffix_base = f"_st_debug_{safe_model_id}"
+
+        # Save flat structured data
+        file_store.save_json_output(whisper_hash, output_payload, suffix=suffix_base)
+
+        # Build and save ST-style rows for downstream table construction
+        try:
+            st_rows, debug_info = build_st_rows(items, debug=True)
+            st_payload = {
+                "whisper_hash": whisper_hash,
+                "rows": st_rows,
+            }
+            file_store.save_json_output(whisper_hash, st_payload, suffix=st_suffix_base)
+            
+            # Save debug info for troubleshooting
+            debug_payload = {
+                "whisper_hash": whisper_hash,
+                "debug_info": debug_info,
+            }
+            file_store.save_json_output(whisper_hash, debug_payload, suffix=debug_suffix_base)
+        except Exception as exc:
+            # Do not fail the main structuring endpoint if ST building has issues
+            import logging
+            logging.getLogger(__name__).warning(
+                "Failed to build ST rows for %s: %s", whisper_hash, exc
+            )
 
     return output_payload
 

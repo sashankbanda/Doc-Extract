@@ -159,9 +159,18 @@ export async function getStructuredDocument(hash: string): Promise<StructuredDat
     return data;
 }
 
-export async function structureDocument(hash: string): Promise<StructuredDataResponse> {
-    console.log("[API] Structuring document for hash:", hash);
-    const response = await fetch(`${API_BASE}/structure/${hash}`, {
+export async function structureDocument(hash: string, model_id?: string, save: boolean = true): Promise<StructuredDataResponse> {
+    console.log("[API] Structuring document for hash:", hash, "model:", model_id, "save:", save);
+    let url = `${API_BASE}/structure/${hash}`;
+    const params = new URLSearchParams();
+    if (model_id) params.append("model_id", model_id);
+    if (!save) params.append("save", "false");
+
+    if (Array.from(params).length > 0) {
+        url += `?${params.toString()}`;
+    }
+
+    const response = await fetch(url, {
         method: "POST",
     });
 
@@ -212,4 +221,27 @@ export async function apiResetSession(): Promise<any> {
     const data = await response.json();
     console.log("[API] Reset session success:", data);
     return data;
+}
+
+// Key Management API
+export async function apiGetKeys(): Promise<Record<string, boolean>> {
+    const response = await fetch(`${API_BASE}/keys`);
+    if (!response.ok) throw new Error("Failed to fetch keys");
+    return response.json();
+}
+
+export async function apiSetKey(provider: string, key: string): Promise<void> {
+    const response = await fetch(`${API_BASE}/keys`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider, key }),
+    });
+    if (!response.ok) throw new Error("Failed to set key");
+}
+
+export async function apiDeleteKey(provider: string): Promise<void> {
+    const response = await fetch(`${API_BASE}/keys/${provider}`, {
+        method: "DELETE",
+    });
+    if (!response.ok) throw new Error("Failed to delete key");
 }

@@ -69,3 +69,5 @@ backend/.env
 *.njsproj
 *.sln
 *.sw?
+
+backend/Api_keys

@@ -7,6 +7,7 @@ import litellm
 
 from backend.config import config
 from backend.services.semantic_tagger import semantic_tagger
+from backend.services.key_manager import key_manager
 
 
 logger = logging.getLogger(__name__)
@@ -261,10 +262,35 @@ class LLMService:
     """
 
     def __init__(self) -> None:
-        # Ensure the Groq key is available to LiteLLM.
-        os.environ.setdefault("GROQ_API_KEY", config.GROQ_API_KEY)
-        self.model = "groq/llama-3.3-70b-versatile"
+        # Default model
+        self.default_model = "groq/llama-3.3-70b-versatile"
         self.system_prompt = self._build_system_prompt()
+        
+    def _get_api_key_for_model(self, model: str) -> Optional[str]:
+        """
+        Determine which API key to use based on the model prefix/provider.
+        """
+        # Mapping from model prefix to key provider name in key_manager
+        # Providers in key_manager: "groq", "openai", "anthropic", "google", "huggingface", "deepseek", "mistral", "xai"
+        
+        if model.startswith("groq/"):
+            return key_manager.get_key("groq") or config.GROQ_API_KEY
+        elif model.startswith("gemini/") or "gemini" in model:
+            return key_manager.get_key("google")
+        elif model.startswith("gpt-"):
+            return key_manager.get_key("openai")
+        elif model.startswith("claude-"):
+            return key_manager.get_key("anthropic")
+        elif model.startswith("huggingface/") or model.startswith("hf/"):
+            return key_manager.get_key("huggingface")
+        elif "deepseek" in model:
+            return key_manager.get_key("deepseek")
+        elif "mistral" in model:
+             return key_manager.get_key("mistral")
+        elif "xai" in model or "grok" in model: # xAI uses 'grok' usually but might be custom endpoint
+             return key_manager.get_key("xai")
+        
+        return None
 
     def _build_system_prompt(self) -> str:
         """
@@ -328,27 +354,24 @@ class LLMService:
         )
 
     async def structure_document(
-        self, raw_text: str, line_metadata: Union[List[LineMeta], Dict[str, LineMeta]]
+        self, 
+        raw_text: str, 
+        line_metadata: Union[List[LineMeta], Dict[str, LineMeta]],
+        model_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Extract flat items array from document using LLM.
         
-        Returns simple structure:
-        {
-            "items": [
-                {
-                    "source_key": "Claimant Name",
-                    "canonical_name": "claimant",
-                    "value": "SYDIA",
-                    "line_numbers": [15, 16, 17],
-                    "semantic_type": "claim.claimant"
-                },
-                ...
-            ]
-        }
-        
-        No normalization, grouping, or complex logic - just raw extraction with line numbers.
+        Args:
+            raw_text: Content to extract from
+            line_metadata: Metadata for lines (used if we need to look up coords)
+            model_id: Optional specific model to use (e.g., 'gemini/gemini-pro', 'groq/llama3-8b')
         """
+        target_model = model_id if model_id else self.default_model
+        api_key = self._get_api_key_for_model(target_model)
+        
+        logger.info(f"[LLMService] Using model: {target_model}")
+        
         # Call LLM to extract items
         messages = [
             {"role": "system", "content": self.system_prompt},
@@ -363,12 +386,22 @@ class LLMService:
             },
         ]
 
-        response = await litellm.acompletion(
-            model=self.model,
-            messages=messages,
-            response_format={"type": "json_object"},
-        )
-        content = response["choices"][0]["message"]["content"]
+        # Prepare kwargs for litellm
+        kwargs = {
+            "model": target_model,
+            "messages": messages,
+            "response_format": {"type": "json_object"},
+        }
+        
+        if api_key:
+            kwargs["api_key"] = api_key
+        
+        try:
+            response = await litellm.acompletion(**kwargs)
+            content = response["choices"][0]["message"]["content"]
+        except Exception as e:
+            logger.error(f"LLM Call Failed for model {target_model}: {e}")
+            raise
 
         try:
             parsed = json.loads(content)
@@ -389,7 +422,6 @@ class LLMService:
 
         # Convert and validate items: normalize line_numbers format
         items = []
-        invalid_items = []
         
         for item in raw_items:
             # Support both "key" (old format) and "source_key" (new format) for backward compatibility
