@@ -888,9 +888,10 @@ export default function Workspace() {
       setActiveBoundingBox(null);
       setSecondaryHighlights([]);
 
-      // Process all line IDs with Promise.allSettled to handle errors gracefully
+      // Process all line IDs with Promise.allSettled
+      // Convert 1-based line numbers (from LLM) to 0-based indices for array access
       const results = await Promise.allSettled(
-        validIds.map(id => highlightLineById(id))
+        validIds.map(id => highlightLineById(id > 0 ? id - 1 : id)) 
       );
 
       // Collect successful bounding boxes
