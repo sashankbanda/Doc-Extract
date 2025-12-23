@@ -263,8 +263,72 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
         return comparisonRows;
     }, [comparisonRows, filter]);
 
+    const [selectedRow, setSelectedRow] = useState<number | null>(null);
+    const [selectedPanel, setSelectedPanel] = useState<'A' | 'B'>('A');
+
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (filteredRows.length === 0) return;
+        
+        switch(e.key) {
+            case 'ArrowDown':
+                e.preventDefault();
+                setSelectedRow(prev => {
+                    if (prev === null) return 0;
+                    return Math.min(prev + 1, filteredRows.length - 1);
+                });
+                break;
+            case 'ArrowUp':
+                e.preventDefault();
+                setSelectedRow(prev => {
+                    if (prev === null) return filteredRows.length - 1;
+                    return Math.max(prev - 1, 0);
+                });
+                break;
+            case 'ArrowRight':
+                e.preventDefault();
+                if (selectedPanel === 'A') setSelectedPanel('B');
+                break;
+            case 'ArrowLeft':
+                 e.preventDefault();
+                 if (selectedPanel === 'B') setSelectedPanel('A');
+                 break;
+        }
+    };
+
+    // Use a ref to track the last processed selection to prevent running the effect on every render
+    const lastSelectionRef = useRef<{row: number | null, panel: 'A' | 'B'}>({ row: null, panel: 'A' });
+
+    // Auto-highlight and scroll
+    useEffect(() => {
+        // Only run if the selection actually changed
+        if (lastSelectionRef.current.row === selectedRow && lastSelectionRef.current.panel === selectedPanel) {
+            return;
+        }
+
+        if (selectedRow !== null && filteredRows[selectedRow]) {
+            const row = filteredRows[selectedRow];
+            onHighlight?.(row.lineNumbers);
+            
+            // Scroll into view
+            const element = document.getElementById(`row-${selectedPanel.toLowerCase()}-${selectedRow}`);
+            element?.scrollIntoView({ behavior: 'auto', block: 'nearest' });
+            
+            // Update last processed selection
+            lastSelectionRef.current = { row: selectedRow, panel: selectedPanel };
+        }
+    }, [selectedRow, selectedPanel, filteredRows, onHighlight]);
+
     return (
-        <div ref={containerRef} className="flex flex-col h-full bg-background/50">
+        <div 
+            ref={containerRef} 
+            className="flex flex-col h-full bg-background/50 outline-none"
+            tabIndex={0}
+            onKeyDown={handleKeyDown}
+            onClick={(e) => {
+                // Only capture focus if clicking on empty space, otherwise child elements handle it
+                if (e.target === e.currentTarget) e.currentTarget.focus();
+            }}
+        >
            {/* ... Header ... */}
            {/* (I am skipping replacing the header code blocks to avoid huge diffs, will target the specific container) */}
             <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 p-4 space-y-4">
@@ -387,8 +451,8 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
             
             {/* Split View Results */}
             <div className={cn(
-                "flex-1 overflow-hidden grid",
-                isNarrow ? "grid-cols-1 grid-rows-2 divide-y" : "grid-cols-2 divide-x"
+                "flex-1 overflow-hidden grid min-h-0",
+                isNarrow ? "grid-cols-1 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] divide-y" : "grid-cols-2 grid-rows-[minmax(0,1fr)] divide-x"
             )}>
                 {/* Panel A */}
                 <ScrollArea className="h-full bg-card/30 min-w-0">
@@ -398,13 +462,22 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
                                 No data loaded. Run comparison to start.
                             </div>
                         )}
-                        {filteredRows.map((row, i) => (
+                        {filteredRows.map((row, i) => {
+                           const isSelected = selectedRow === i && selectedPanel === 'A';
+                           return (
                            <div 
-                                key={`a-${i}`} 
-                                onClick={() => onHighlight?.(row.lineNumbers)}
+                                key={`a-${i}`}
+                                id={`row-a-${i}`}
+                                onClick={() => {
+                                    // Highlight handled by effect
+                                    setSelectedRow(i);
+                                    setSelectedPanel('A');
+                                }}
                                 className={cn(
-                                   "p-3 rounded border text-sm grid gap-1 cursor-pointer transition-colors hover:bg-muted/50 group",
-                                   !row.isMatch && "border-destructive/20 bg-destructive/5"
+                                   "p-3 rounded border text-sm grid gap-1 cursor-pointer transition-colors group",
+                                   !isSelected && "hover:bg-muted/50",
+                                   isSelected ? "bg-accent border-primary ring-1 ring-primary/20" : "border-border",
+                                   !row.isMatch && !isSelected && "border-destructive/20 bg-destructive/5"
                                )}
                            >
                                <div className="flex justify-between items-center">
@@ -440,7 +513,8 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
                                     onUpdate={updateItem}
                                />
                            </div> 
-                        ))}
+                           );
+                        })}
                     </div>
                 </ScrollArea>
                 
@@ -452,13 +526,22 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
                                 No data loaded. Run comparison to start.
                             </div>
                         )}
-                         {filteredRows.map((row, i) => (
+                        {filteredRows.map((row, i) => {
+                           const isSelected = selectedRow === i && selectedPanel === 'B';
+                           return (
                            <div 
                                 key={`b-${i}`} 
-                                onClick={() => onHighlight?.(row.lineNumbers)}
+                                id={`row-b-${i}`}
+                                onClick={() => {
+                                    // Highlight handled by effect
+                                    setSelectedRow(i);
+                                    setSelectedPanel('B');
+                                }}
                                 className={cn(
-                                   "p-3 rounded border text-sm grid gap-1 cursor-pointer transition-colors hover:bg-muted/50 group",
-                                   !row.isMatch && "border-destructive/20 bg-destructive/5"
+                                   "p-3 rounded border text-sm grid gap-1 cursor-pointer transition-colors group",
+                                   !isSelected && "hover:bg-muted/50",
+                                   isSelected ? "bg-accent border-primary ring-1 ring-primary/20" : "border-border",
+                                   !row.isMatch && !isSelected && "border-destructive/20 bg-destructive/5"
                                )}
                            >
                                 <div className="flex justify-between items-center">
@@ -494,7 +577,8 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
                                     onUpdate={updateItem}
                                />
                            </div> 
-                        ))}
+                           );
+                        })}
                     </div>
                 </ScrollArea>
             </div>

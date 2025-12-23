@@ -4,7 +4,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useComparisonContext } from "@/context/ComparisonContext";
 import { cn } from "@/lib/utils";
 import { CheckCircle2, Download, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface ResultTabProps {
     onHighlight?: (lines: number[]) => void;
@@ -13,15 +13,57 @@ interface ResultTabProps {
 export function ResultTab({ onHighlight }: ResultTabProps) {
     const { comparisonRows, dataA, dataB, approvedItems, whisperHash, deleteItem } = useComparisonContext(); // Assume whisperHash is exposed
     const [filter, setFilter] = useState<'all' | 'approved' | 'null'>('all');
+    const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
     const filteredRows = comparisonRows.filter(row => {
-        const isApproved = approvedItems[row.key] !== undefined;
-        const isNull = !isApproved && !row.isMatch;
-
-        if (filter === 'approved') return isApproved;
-        if (filter === 'null') return isNull;
+        if (filter === 'all') return true;
+        const approvedVal = approvedItems[row.key];
+        if (filter === 'approved') return approvedVal !== undefined;
+        // null means mismatch and not approved
+        if (filter === 'null') return approvedVal === undefined && !row.isMatch;
         return true;
     });
+
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (filteredRows.length === 0) return;
+        
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            setSelectedIndex(prev => {
+                if (prev === null) return 0;
+                return Math.min(prev + 1, filteredRows.length - 1);
+            });
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            setSelectedIndex(prev => {
+                if (prev === null) return filteredRows.length - 1;
+                return Math.max(prev - 1, 0);
+            });
+        }
+    };
+
+    // Auto-highlight and scroll when selectedIndex changes
+    // Use a ref to track the last processed selection
+    const lastSelectionRef = useRef<number | null>(null);
+
+    // Auto-highlight and scroll when selectedIndex changes
+    useEffect(() => {
+        // Only run if the selection actually changed
+        if (lastSelectionRef.current === selectedIndex) {
+            return;
+        }
+
+        if (selectedIndex !== null && filteredRows[selectedIndex]) {
+            const row = filteredRows[selectedIndex];
+            onHighlight?.(row.lineNumbers);
+
+            // Scroll into view
+            const el = document.getElementById(`result-row-${selectedIndex}`);
+            el?.scrollIntoView({ block: 'nearest', behavior: 'auto' });
+            
+            lastSelectionRef.current = selectedIndex;
+        }
+    }, [selectedIndex, filteredRows, onHighlight]);
 
     const handleExport = async () => {
         if (!whisperHash) return;
@@ -68,11 +110,10 @@ export function ResultTab({ onHighlight }: ResultTabProps) {
 
     return (
         <div className="flex flex-col h-full bg-background/50">
-            {/* Header with Filters */}
-            <div className="border-b bg-background/95 backdrop-blur px-4 py-3 flex flex-wrap gap-4 items-center justify-between">
+             <div className="border-b bg-background/95 backdrop-blur px-4 py-3 flex flex-wrap gap-4 items-center justify-between">
                 <div className="flex items-center gap-2 font-medium min-w-fit">
-                     <CheckCircle2 className="w-5 h-5 text-primary" />
-                     Final Result
+                     <CheckCircle2 className="w-5 h-5 text-green-600" />
+                     <h2 className="text-lg font-semibold">Final Result</h2>
                 </div>
                 
                 <div className="flex items-center gap-2 flex-wrap justify-end">
@@ -99,30 +140,34 @@ export function ResultTab({ onHighlight }: ResultTabProps) {
                             onClick={() => setFilter("null")}
                             className="h-7 text-destructive hover:text-destructive"
                         >
-                            Null
+                            Review
                         </Button>
                     </div>
-                    <Button 
-                        size="sm" 
-                        variant="outline" 
-                        className="h-9 gap-2"
-                        onClick={handleExport}
-                    >
+                    
+                    <Button size="sm" variant="outline" className="h-9 gap-2" onClick={handleExport} disabled={!whisperHash}>
                         <Download className="w-4 h-4" />
                         Export JSON
                     </Button>
                 </div>
             </div>
 
-            <ScrollArea className="flex-1 h-full"> 
-                <div className="p-4">
-                     <div className="rounded-md border bg-card">
+            <ScrollArea className="flex-1 h-full bg-background">
+                <div 
+                    className="p-4 outline-none min-h-full" 
+                    tabIndex={0} 
+                    onKeyDown={handleKeyDown}
+                    // Auto-focus on mount or click
+                    onClick={(e) => e.currentTarget.focus()}
+                >
+
+                    <div className="rounded-md border bg-card">
                         <Table>
                             <TableHeader>
                                 <TableRow>
                                     <TableHead className="w-[300px]">Source Key</TableHead>
                                     <TableHead>Value</TableHead>
                                     <TableHead className="w-[100px] text-right">L#</TableHead>
+                                    <TableHead className="w-[50px]"></TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -149,16 +194,24 @@ export function ResultTab({ onHighlight }: ResultTabProps) {
                                         // Match
                                         displayValue = row.valA;
                                     }
+                                    
+                                    const isSelected = i === selectedIndex;
 
                                     return (
                                         <TableRow 
-                                            key={i} 
+                                            key={i}
+                                            id={`result-row-${i}`}
                                             className={cn(
-                                                "cursor-pointer hover:bg-muted/50 transition-colors",
+                                                "cursor-pointer transition-colors border-l-4 border-l-transparent",
                                                 isMiss && "text-muted-foreground italic bg-destructive/5",
-                                                isApproved && "bg-green-50/50"
+                                                isApproved && "bg-green-50/50",
+                                                isSelected && "bg-accent border-l-primary ring-1 ring-inset ring-primary/20",
+                                                !isSelected && "hover:bg-muted/50"
                                             )}
-                                            onClick={() => onHighlight?.(row.lineNumbers)}
+                                            onClick={() => {
+                                                setSelectedIndex(i);
+                                                // onHighlight handled by effect
+                                            }}
                                         >
                                             <TableCell className="font-medium align-top">
                                                 {row.key}
