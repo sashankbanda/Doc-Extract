@@ -345,7 +345,7 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
                 isNarrow ? "grid-cols-1 grid-rows-2 divide-y" : "grid-cols-2 divide-x"
             )}>
                 {/* Panel A */}
-                <ScrollArea className="h-full bg-card/30">
+                <ScrollArea className="h-full bg-card/30 min-w-0">
                     <div className="p-4 space-y-1">
                         {!dataA && !loadingA && (
                             <div className="text-center text-muted-foreground py-10 text-sm">
@@ -374,7 +374,7 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
                 </ScrollArea>
                 
                 {/* Panel B */}
-                 <ScrollArea className="h-full bg-card/30">
+                 <ScrollArea className="h-full bg-card/30 min-w-0">
                     <div className="p-4 space-y-1">
                         {!dataB && !loadingB && (
                             <div className="text-center text-muted-foreground py-10 text-sm">
