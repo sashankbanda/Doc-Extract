@@ -48,6 +48,8 @@ interface ComparisonContextType {
     loadingA: boolean;
     loadingB: boolean;
     runComparison: () => Promise<void>;
+    focusKey: string | null;
+    setFocusKey: (key: string | null) => void;
 }
 
 const ComparisonContext = createContext<ComparisonContextType | undefined>(undefined);
@@ -126,6 +128,9 @@ export function ComparisonProvider({ children, whisperHash }: { children: ReactN
         }
     };
     
+    // Check key to focus on when switching tabs
+    const [focusKey, setFocusKey] = useState<string | null>(null);
+
     // Run Comparison Logic
     const runComparison = async () => {
         if (!whisperHash) {
@@ -335,7 +340,9 @@ export function ComparisonProvider({ children, whisperHash }: { children: ReactN
         approveItem,
         updateItem,
         whisperHash,
-        deleteItem
+        deleteItem,
+        focusKey,
+        setFocusKey
     };
 
     return (

@@ -9,10 +9,11 @@ import { useEffect, useRef, useState } from "react";
 
 interface ResultTabProps {
     onHighlight?: (lines: number[]) => void;
+    onRequestCompare?: () => void;
 }
 
-export function ResultTab({ onHighlight }: ResultTabProps) {
-    const { comparisonRows, dataA, dataB, approvedItems, whisperHash, deleteItem, runComparison, loadingA, loadingB } = useComparisonContext(); // Assume whisperHash is exposed
+export function ResultTab({ onHighlight, onRequestCompare }: ResultTabProps) {
+    const { comparisonRows, dataA, dataB, approvedItems, whisperHash, deleteItem, runComparison, loadingA, loadingB, setFocusKey } = useComparisonContext(); // Assume whisperHash is exposed
     const [filter, setFilter] = useState<'all' | 'approved' | 'null'>('all');
     const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
@@ -73,7 +74,10 @@ export function ResultTab({ onHighlight }: ResultTabProps) {
                 lines = row.lineNumbersA;
             }
             
-            onHighlight?.(lines);
+            // Only highlight if we have lines (don't highlight on null/mismatch unless approved)
+            if (lines.length > 0) {
+                 onHighlight?.(lines);
+            }
 
             // Scroll into view
             const el = document.getElementById(`result-row-${selectedIndex}`);
@@ -258,6 +262,14 @@ export function ResultTab({ onHighlight }: ResultTabProps) {
                                             )}
                                             onClick={() => {
                                                 setSelectedIndex(i);
+                                                
+                                                if (isMiss && onRequestCompare) {
+                                                    // Redirect to compare tab
+                                                    setFocusKey(row.key);
+                                                    onRequestCompare();
+                                                    return;
+                                                }
+
                                                 // onHighlight handled by effect
                                             }}
                                         >

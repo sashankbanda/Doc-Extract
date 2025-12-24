@@ -159,7 +159,9 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
         approvedItems, 
         approveItem,
         updateItem,
-        deleteItem
+
+        deleteItem,
+        focusKey, setFocusKey
     } = useComparisonContext();
     
     // Local run extraction removed, using context runComparison
@@ -259,6 +261,25 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
             lastSelectionRef.current = { row: selectedRow, panel: selectedPanel };
         }
     }, [selectedRow, selectedPanel, filteredRows, onHighlight]);
+    
+
+
+    // Handle focusKey change (from ResultTab redirect)
+    useEffect(() => {
+        if (focusKey && filteredRows.length > 0) {
+            const index = filteredRows.findIndex(r => r.key === focusKey);
+            if (index !== -1) {
+                // Determine which panel to focus - prefer non-empty panel if possible, else default to A
+                // If mismatch, usually one side might be null/empty, or both differ.
+                // We'll just default to A for now as it's the primary.
+                setSelectedRow(index);
+                // Also scroll explicitly if needed, but the effect above handles it based on selectedRow change.
+                
+                // Clear the focus key so it doesn't re-trigger
+                setFocusKey(null);
+            }
+        }
+    }, [focusKey, filteredRows, setFocusKey]);
     
     // Model Names for Headers
     const getModelName = (id: string, isCustom: boolean, custom: string) => {

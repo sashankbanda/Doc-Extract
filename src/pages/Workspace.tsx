@@ -566,7 +566,7 @@ export default function Workspace() {
 
 
       case "result":
-        return <ResultTab onHighlight={(lines) => handleStructuredHighlight(lines, true)} />;
+        return <ResultTab onHighlight={(lines) => handleStructuredHighlight(lines, true)} onRequestCompare={() => setActiveTab("compare")} />;
       case "compare":
         return <ComparisonTab whisperHash={whisperHash} onHighlight={(lines) => handleStructuredHighlight(lines, true)} />;
     }
