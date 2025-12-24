@@ -1,9 +1,10 @@
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useComparisonContext } from "@/context/ComparisonContext";
 import { cn } from "@/lib/utils";
-import { CheckCircle2, Download, Trash2 } from "lucide-react";
+import { CheckCircle2, Download, Loader2, Play, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 interface ResultTabProps {
@@ -11,7 +12,7 @@ interface ResultTabProps {
 }
 
 export function ResultTab({ onHighlight }: ResultTabProps) {
-    const { comparisonRows, dataA, dataB, approvedItems, whisperHash, deleteItem } = useComparisonContext(); // Assume whisperHash is exposed
+    const { comparisonRows, dataA, dataB, approvedItems, whisperHash, deleteItem, runComparison, loadingA, loadingB } = useComparisonContext(); // Assume whisperHash is exposed
     const [filter, setFilter] = useState<'all' | 'approved' | 'null'>('all');
     const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
@@ -116,11 +117,41 @@ export function ResultTab({ onHighlight }: ResultTabProps) {
         }
     };
 
+    if (loadingA || loadingB) {
+        return (
+            <div className="flex flex-col h-full bg-background/50">
+                <div className="border-b bg-background/95 backdrop-blur px-4 py-3 sticky top-0 z-10">
+                    <div className="flex items-center gap-2 font-medium">
+                        <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                        <h2 className="text-lg font-semibold">Extracting Data...</h2>
+                    </div>
+                </div>
+                <div className="p-8 space-y-4">
+                     <div className="space-y-4">
+                        {Array.from({length: 8}).map((_, i) => (
+                            <div key={i} className="flex gap-4 items-center">
+                                <Skeleton className="h-4 w-[200px]" />
+                                <Skeleton className="h-4 w-full" />
+                            </div>
+                        ))}
+                     </div>
+                     <div className="flex justify-center text-muted-foreground text-sm pt-4 animate-pulse">
+                        Comparing models, please wait...
+                     </div>
+                </div>
+            </div>
+        );
+    }
+
     if (!dataA && !dataB) {
         return (
             <div className="flex flex-col items-center justify-center h-full text-muted-foreground p-8">
                 <p>No comparison data available.</p>
-                <p className="text-sm mt-2">Please run a comparison in the "Compare Models" tab first.</p>
+                <p className="text-sm mt-2 mb-6">Please run a comparison to view results.</p>
+                <Button onClick={runComparison} size="lg">
+                    <Play className="w-4 h-4 mr-2" />
+                    Run Extraction
+                </Button>
             </div>
         );
     }

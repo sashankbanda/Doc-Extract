@@ -284,7 +284,7 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
              <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 p-4 space-y-4">
                 {/* Header Actions */}
                 <div className="flex items-center justify-between">
-                     <h2 className="text-lg font-semibold tracking-tight">Compare Models</h2>
+                     <h2 className="text-lg font-semibold tracking-tight hidden">Compare Models</h2>
                      {/* We can put header actions here if needed */}
                 </div>
 
@@ -330,7 +330,7 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
                 {/* Empty State / Single Run Button */}
                 {(!dataA && !dataB && !loadingA && !loadingB) && (
                     <div className="col-span-2 flex flex-col items-center justify-center p-8 space-y-4 text-center">
-                         <div className="p-4 rounded-full bg-muted/50 mb-2">
+                         <div className="p-4 rounded-full bg-muted/50 mb-2 hidden">
                             <ArrowRight className="w-8 h-8 text-muted-foreground/50" />
                          </div>
                          <h3 className="text-lg font-semibold text-foreground">Ready to Compare</h3>
