@@ -231,6 +231,11 @@ export function ComparisonProvider({ children, whisperHash }: { children: ReactN
                 const linesA = itemA?.line_numbers || [];
                 const linesB = itemB?.line_numbers || [];
                 const allLines = Array.from(new Set([...linesA, ...linesB])).sort((a, b) => a - b);
+                
+                // Debug log for missing lines
+                if (allLines.length === 0) {
+                     // console.log(`[ComparisonContext] No lines for key ${uniqueKey}`, { itemA, itemB });
+                }
 
                 // Determine sort key (min line number -> document order)
                 const minLine = allLines.length > 0 ? Math.min(...allLines) : Number.MAX_SAFE_INTEGER;

@@ -65,6 +65,14 @@ export default function Workspace() {
   const [secondaryHighlights, setSecondaryHighlights] = useState<BoundingBox[]>([]);
   const [pageDimensions, setPageDimensions] = useState<Record<number, { width: number, height: number }>>({});
 
+  // Reset dimensions when document changes to prevent stale data
+  useEffect(() => {
+    setPageDimensions({});
+    // Also clear highlights
+    setActiveBoundingBox(null);
+    setSecondaryHighlights([]);
+  }, [whisperHash]);
+
   
   // Text tab state
   const [textSelectedIndex, setTextSelectedIndex] = useState<number>(-1);
