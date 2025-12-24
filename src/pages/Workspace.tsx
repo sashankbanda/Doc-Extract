@@ -329,15 +329,17 @@ export default function Workspace() {
       console.log(`[DEBUG] API returned coordinates for line ${lineIndex}:`, rect);
       
       const pdfPage = rect.page + 1;
+      // Normalize coordinates to 0-1 range based on the dimensions used for the API call
+      // This ensures highlights remain accurate even if zoom changes later (as they will be scaled by current canvas size)
       const boundingBox: BoundingBox = {
-        x: rect.x1,
-        y: rect.y1,
-        width: rect.x2 - rect.x1,
-        height: rect.y2 - rect.y1,
+        x: rect.x1 / dims.width,
+        y: rect.y1 / dims.height,
+        width: (rect.x2 - rect.x1) / dims.width,
+        height: (rect.y2 - rect.y1) / dims.height,
         page: pdfPage
       };
       
-      console.log(`[DEBUG] Final boundingBox for line ${lineIndex}:`, boundingBox);
+      console.log(`[DEBUG] Final normalized boundingBox for line ${lineIndex}:`, boundingBox);
       
       return boundingBox;
     },

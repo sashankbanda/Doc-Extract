@@ -13,8 +13,8 @@ export function HighlightOverlay({
   highlights,
   activeHighlight,
   scale = 1,
-  canvasWidth,
-  canvasHeight,
+  canvasWidth = 0,
+  canvasHeight = 0,
 }: HighlightOverlayProps) {
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden">
@@ -24,10 +24,11 @@ export function HighlightOverlay({
           key={index}
           className="absolute rounded-sm"
           style={{
-            left: highlight.x * scale,
-            top: highlight.y * scale,
-            width: highlight.width * scale,
-            height: highlight.height * scale,
+            // Assume coordinates are normalized 0-1
+            left: highlight.x * canvasWidth,
+            top: highlight.y * canvasHeight,
+            width: highlight.width * canvasWidth,
+            height: highlight.height * canvasHeight,
             backgroundColor: "hsl(var(--highlight-overlay) / 0.3)",
           }}
           initial={{ opacity: 0 }}
@@ -42,10 +43,11 @@ export function HighlightOverlay({
           <motion.div
             className="absolute rounded-sm"
             style={{
-              left: activeHighlight.x * scale,
-              top: activeHighlight.y * scale,
-              width: activeHighlight.width * scale,
-              height: activeHighlight.height * scale,
+              // Assume coordinates are normalized 0-1
+              left: activeHighlight.x * canvasWidth,
+              top: activeHighlight.y * canvasHeight,
+              width: activeHighlight.width * canvasWidth,
+              height: activeHighlight.height * canvasHeight,
             }}
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}

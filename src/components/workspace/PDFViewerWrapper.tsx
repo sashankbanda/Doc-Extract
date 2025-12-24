@@ -553,7 +553,7 @@ export function PDFViewerWrapper({
                       <HighlightOverlay
                         highlights={highlights.filter(h => h.page === pageNum)}
                         activeHighlight={activeHighlight?.page === pageNum ? activeHighlight : null}
-                        scale={zoom / 100}
+                        scale={1}
                         canvasWidth={dims?.width || 0}
                         canvasHeight={dims?.height || 0}
                       />
