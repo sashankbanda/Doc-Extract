@@ -163,12 +163,7 @@ export function ResultTab({ onHighlight, onRequestCompare }: ResultTabProps) {
     return (
         <div className="flex flex-col h-full bg-background/50">
              <div className="border-b bg-background/95 backdrop-blur px-4 py-3 flex flex-wrap gap-4 items-center justify-between">
-                <div className="flex items-center gap-2 font-medium min-w-fit">
-                     <CheckCircle2 className="w-5 h-5 text-green-600" />
-                     <h2 className="text-lg font-semibold">Final Result</h2>
-                </div>
-                
-                <div className="flex items-center gap-2 flex-wrap justify-end">
+                <div className="flex items-center gap-2">
                     <div className="flex items-center space-x-2 bg-muted/50 p-1 rounded-md border text-xs">
                         <Button 
                             variant={filter === "all" ? "secondary" : "ghost"} 
@@ -195,6 +190,13 @@ export function ResultTab({ onHighlight, onRequestCompare }: ResultTabProps) {
                             Review
                         </Button>
                     </div>
+                </div>
+                
+                <div className="flex items-center gap-2 flex-wrap justify-end">
+                    <Button size="sm" variant="default" className="h-9 gap-2 bg-green-600 hover:bg-green-700">
+                        <CheckCircle2 className="w-4 h-4" />
+                        Finish Review
+                    </Button>
                     
                     <Button size="sm" variant="outline" className="h-9 gap-2" onClick={handleExport} disabled={!whisperHash}>
                         <Download className="w-4 h-4" />
