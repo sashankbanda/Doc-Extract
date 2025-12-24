@@ -122,20 +122,7 @@ export interface StructuredDataResponse {
     metadata?: any;
 }
 
-// Frontend-organized format for UI display (built heuristically from items)
-// Each key maps to an array of values (no merging, all preserved)
-// Also carries the original flat items so downstream layout layers
-// can reason about document structure without re-fetching from backend.
-export interface OrganizedStructuredData {
-    items: StructuredItem[];
-    sections: {
-        Claims?: Array<Record<string, Array<{ value: string; line_numbers: number[] }>>>;
-        "Policy Info"?: Record<string, Array<{ value: string; line_numbers: number[] }>>;
-        Summary?: Record<string, Array<{ value: string; line_numbers: number[] }>>;
-        "Report Info"?: Record<string, Array<{ value: string; line_numbers: number[] }>>;
-        Other?: Record<string, Array<{ value: string; line_numbers: number[] }>>;
-    };
-}
+
 
 export async function getStructuredDocument(hash: string): Promise<StructuredDataResponse | null> {
     console.log("[API] Getting existing structured data for hash:", hash);
@@ -185,26 +172,7 @@ export async function structureDocument(hash: string, model_id?: string, save: b
     return data;
 }
 
-export async function updateStructuredDocument(hash: string, items: StructuredItem[]): Promise<StructuredDataResponse> {
-    console.log("[API] Updating structured data for hash:", hash);
-    const response = await fetch(`${API_BASE}/structure/${hash}`, {
-        method: "PUT",
-        headers: {
-            "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ items }),
-    });
 
-    if (!response.ok) {
-        const error = await response.json().catch(() => ({ detail: "Failed to update structured document" }));
-        console.error("[API] Update structured error:", error);
-        throw new Error(error.detail || "Failed to update structured document");
-    }
-
-    const data = await response.json();
-    console.log("[API] Update structured success, data:", data);
-    return data;
-}
 
 export async function apiResetSession(): Promise<any> {
     console.log("[API] Resetting session (clearing input/output files)");
