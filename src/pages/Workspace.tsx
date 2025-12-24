@@ -1,30 +1,22 @@
 import DocumentViewer, { guessFileType } from "@/components/DocumentViewer";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ComparisonTab } from "@/components/workspace/ComparisonTab";
 import { ExtractedTextPanel } from "@/components/workspace/ExtractedTextPanel";
-import { FileSelectorDropdown } from "@/components/workspace/FileSelectorDropdown";
 import { PDFViewerWrapper } from "@/components/workspace/PDFViewerWrapper";
 import { ResultTab } from "@/components/workspace/ResultTab";
 import { TwoPaneLayout } from "@/components/workspace/TwoPaneLayout";
 import { ComparisonProvider } from "@/context/ComparisonContext";
 import { useDocumentContext } from "@/context/DocumentContext";
-import { API_BASE, apiHighlight, apiResetSession, apiRetrieve } from "@/lib/api";
+import { API_BASE, apiHighlight, apiRetrieve } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { BoundingBox, LayoutText } from "@/types/document";
 import { AnimatePresence, motion } from "framer-motion";
-import { CheckCircle2, FileText, GitCompare, Maximize2, RotateCcw, Search, X } from "lucide-react";
+import {
+  CheckCircle2, FileText, GitCompare, Maximize2,
+  Minimize2,
+  Search,
+  X
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
@@ -154,6 +146,25 @@ export default function Workspace() {
   }, [resultText, lineMetadata]);
 
 
+
+  // Fullscreen state
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const isFs = document.fullscreenElement === rightPaneRef.current;
+      setIsFullscreen(isFs);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    // Webkit fallback
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+    };
+  }, []);
 
   const handlePageDimensions = useCallback((pageNum: number, width: number, height: number) => {
     setPageDimensions(prev => {
@@ -601,6 +612,29 @@ export default function Workspace() {
               highlights={allHighlights}
               activeHighlight={activeBoundingBox}
               onPageDimensions={handlePageDimensions}
+              files={documents
+                .filter((d) => d.status === "complete" && d.whisperHash)
+                .map((d) => ({
+                  id: d.whisperHash!,
+                  name: d.fileName || d.name,
+                }))}
+              selectedFileId={whisperHash || ""}
+              onSelectFile={(hash) => {
+                const doc = documents.find((d) => d.whisperHash === hash);
+                if (doc) {
+                  setActiveDocument(doc.id);
+                  setSearchParams(
+                    { whisper_hash: hash, fileName: doc.fileName || doc.name },
+                    { replace: true }
+                  );
+                }
+              }}
+              onRemoveFile={(hash) => {
+                const doc = documents.find((d) => d.whisperHash === hash);
+                if (doc) {
+                  removeDocument(doc.id);
+                }
+              }}
             />
           ) : (
             <DocumentViewer
@@ -608,111 +642,37 @@ export default function Workspace() {
               fileType={fileType}
               highlights={highlightRects}
               onPageDimensions={handlePageDimensions}
+              files={documents
+                .filter((d) => d.status === "complete" && d.whisperHash)
+                .map((d) => ({
+                  id: d.whisperHash!,
+                  name: d.fileName || d.name,
+                }))}
+              selectedFileId={whisperHash || ""}
+              onSelectFile={(hash) => {
+                const doc = documents.find((d) => d.whisperHash === hash);
+                if (doc) {
+                  setActiveDocument(doc.id);
+                  setSearchParams(
+                    { whisper_hash: hash, fileName: doc.fileName || doc.name },
+                    { replace: true }
+                  );
+                }
+              }}
+              onRemoveFile={(hash) => {
+                const doc = documents.find((d) => d.whisperHash === hash);
+                if (doc) {
+                  removeDocument(doc.id);
+                }
+              }}
             />
           )
         }
         rightPane={
           <div className="h-full flex flex-col bg-background" ref={rightPaneRef}>
             {/* Header with file selector */}
-            <div className="flex flex-wrap items-center justify-between gap-3 p-4 border-b border-border/50">
-              <div className="flex items-center gap-2 flex-1 min-w-0">
-                <FileSelectorDropdown
-                  files={documents
-                    .filter((d) => d.status === "complete" && d.whisperHash)
-                    .map((d) => ({
-                      id: d.whisperHash!,
-                      name: d.fileName || d.name,
-                    }))}
-                  selectedId={whisperHash || ""}
-                  onSelect={(hash) => {
-                    // Find document by hash
-                    const doc = documents.find((d) => d.whisperHash === hash);
-                    if (doc) {
-                      setActiveDocument(doc.id);
-                      setSearchParams(
-                        { whisper_hash: hash, fileName: doc.fileName || doc.name },
-                        { replace: true }
-                      );
-                    }
-                  }}
-                  onRemove={(hash) => {
-                    // Find document by hash and remove it
-                    const doc = documents.find((d) => d.whisperHash === hash);
-                    if (doc) {
-                      removeDocument(doc.id);
-                      // If this was the active document, the context will auto-select another
-                      // If no documents left, the sync effect will redirect to upload
-                    }
-                  }}
-                />
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="gap-2 text-muted-foreground hover:text-destructive shrink-0"
-                      title="Clear all files and reset session"
-                    >
-                      <RotateCcw className="w-4 h-4" />
-                      <span className="hidden sm:inline">Reset Session</span>
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Reset Session</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        Are you sure you want to reset the session? This will clear all uploaded files and their extracted data. This action cannot be undone.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction
-                        onClick={async () => {
-                          try {
-                            await apiResetSession();
-                            clearDocuments();
-                            navigate("/upload");
-                          } catch (err) {
-                            console.error("Failed to reset session:", err);
-                            // Still clear local state? Maybe better to warn user.
-                            // For now, proceed with clearing local state as fallback
-                            clearDocuments();
-                            navigate("/upload");
-                          }
-                        }}
-                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                      >
-                        Reset Session
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              </div>
-              <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end w-full sm:w-auto">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="shrink-0"
-                  title="Enter fullscreen"
-                  onClick={async () => {
-                    if (!rightPaneRef.current) return;
-                    try {
-                      if (rightPaneRef.current.requestFullscreen) {
-                        await rightPaneRef.current.requestFullscreen();
-                      } else if ((rightPaneRef.current as any).webkitRequestFullscreen) {
-                        await (rightPaneRef.current as any).webkitRequestFullscreen();
-                      }
-                    } catch (err) {
-                      console.error("[Workspace] Fullscreen error:", err);
-                    }
-                  }}
-                >
-                  <Maximize2 className="w-4 h-4" />
-                </Button>
+            {/* Header - now mostly empty as file selector moved to left pane */}
 
-
-              </div>
-            </div>
 
             {/* Tabs and Search */}
             <div className="flex items-center justify-between gap-4 p-4 border-b border-border/50">
@@ -769,6 +729,38 @@ export default function Workspace() {
                       : 'No results'}
                   </div>
                 )}
+
+
+                <button
+                  className="p-1 rounded-lg hover:bg-muted/50 transition-colors text-muted-foreground hover:text-foreground shrink-0"
+                  title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                  onClick={async () => {
+                    if (!rightPaneRef.current) return;
+                    try {
+                      if (!isFullscreen) {
+                        if (rightPaneRef.current.requestFullscreen) {
+                          await rightPaneRef.current.requestFullscreen();
+                        } else if ((rightPaneRef.current as any).webkitRequestFullscreen) {
+                          await (rightPaneRef.current as any).webkitRequestFullscreen();
+                        }
+                      } else {
+                        if (document.exitFullscreen) {
+                          await document.exitFullscreen();
+                        } else if ((document as any).webkitExitFullscreen) {
+                          await (document as any).webkitExitFullscreen();
+                        }
+                      }
+                    } catch (err) {
+                      console.error("[Workspace] Fullscreen error:", err);
+                    }
+                  }}
+                >
+                  {isFullscreen ? (
+                    <Minimize2 className="w-4 h-4" />
+                  ) : (
+                    <Maximize2 className="w-4 h-4" />
+                  )}
+                </button>
               </div>
             </div>
 

@@ -1,10 +1,11 @@
-import { useState, useRef, useEffect, useCallback } from "react";
-import { motion } from "framer-motion";
-import { ZoomIn, ZoomOut, RotateCw, Maximize2, ChevronUp, ChevronDown, Minimize2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BoundingBox } from "@/types/document";
-import { HighlightOverlay } from "./HighlightOverlay";
+import { motion } from "framer-motion";
+import { ChevronDown, ChevronUp, Maximize2, Minimize2, RotateCw, ZoomIn, ZoomOut } from "lucide-react";
 import * as pdfjsLib from 'pdfjs-dist';
+import { useCallback, useEffect, useRef, useState } from "react";
+import { FileSelectorDropdown } from "./FileSelectorDropdown";
+import { HighlightOverlay } from "./HighlightOverlay";
 
 // Set up PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
@@ -15,6 +16,11 @@ interface PDFViewerWrapperProps {
   highlights?: BoundingBox[];
   activeHighlight?: BoundingBox | null;
   onPageDimensions?: (pageNum: number, width: number, height: number) => void;
+  // File props
+  files: { id: string; name: string }[];
+  selectedFileId: string;
+  onSelectFile: (id: string) => void;
+  onRemoveFile?: (id: string) => void;
 }
 
 export function PDFViewerWrapper({
@@ -23,6 +29,10 @@ export function PDFViewerWrapper({
   highlights = [],
   activeHighlight,
   onPageDimensions,
+  files,
+  selectedFileId,
+  onSelectFile,
+  onRemoveFile,
 }: PDFViewerWrapperProps) {
   const [zoom, setZoom] = useState(100);
   const [currentPage, setCurrentPage] = useState(1);
@@ -313,8 +323,15 @@ export function PDFViewerWrapper({
       )}
     >
       {/* Toolbar */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border/50 gap-4">
         <div className="flex items-center gap-2">
+            <FileSelectorDropdown
+                files={files}
+                selectedId={selectedFileId}
+                onSelect={onSelectFile}
+                onRemove={onRemoveFile}
+            />
+            <div className="w-px h-5 bg-border mx-2" />
           <button
             onClick={handlePreviousPage}
             disabled={currentPage <= 1}

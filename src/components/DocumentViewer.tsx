@@ -1,5 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import PdfViewer, { PdfViewerHandle } from './PdfViewer';
+import { FileSelectorDropdown } from "./workspace/FileSelectorDropdown";
 // Note: These imports assume packages are installed.
 // User must run: npm install xlsx docx-preview
 import { renderAsync } from 'docx-preview';
@@ -32,6 +33,11 @@ interface DocumentViewerProps {
     highlights?: HighlightRect[];
     onPageDimensions?: (page: number, width: number, height: number) => void;
     currentPage?: number; // Used for PDF navigation
+    // File props
+    files: { id: string; name: string }[];
+    selectedFileId: string;
+    onSelectFile: (id: string) => void;
+    onRemoveFile?: (id: string) => void;
 }
 
 export interface DocumentViewerHandle {
@@ -43,7 +49,11 @@ const DocumentViewer = forwardRef<DocumentViewerHandle, DocumentViewerProps>(({
     fileType, 
     highlights = [], 
     onPageDimensions, 
-    currentPage 
+    currentPage,
+    files,
+    selectedFileId,
+    onSelectFile,
+    onRemoveFile
 }, ref) => {
     
     // PDF Ref
@@ -61,41 +71,63 @@ const DocumentViewer = forwardRef<DocumentViewerHandle, DocumentViewerProps>(({
         }
     }));
 
-    // --- Renderers ---
+    // Wrapper to add Toolbar for all types
+    const renderContent = () => {
+        // 1. PDF - delegated to internal PdfViewer (Note: user likely uses PDFViewerWrapper instead at Workspace level)
+        if (fileType === 'pdf') {
+             return (
+                <PdfViewer
+                    ref={pdfRef}
+                    pdfUrl={fileUrl}
+                    highlights={highlights}
+                    onPageDimensions={onPageDimensions}
+                />
+            );
+        }
 
-    // 1. PDF
-    if (fileType === 'pdf') {
-        return (
-            <PdfViewer
-                ref={pdfRef}
-                pdfUrl={fileUrl}
-                highlights={highlights}
-                onPageDimensions={onPageDimensions}
-            />
-        );
-    }
+        // 2. Image
+        if (fileType === 'image') {
+            return <ImageViewer fileUrl={fileUrl} highlights={highlights} />;
+        }
 
-    // 2. Image
-    if (fileType === 'image') {
-        return <ImageViewer fileUrl={fileUrl} highlights={highlights} />;
-    }
+        // 3. Text
+        if (fileType === 'text') {
+            return <TextViewer fileUrl={fileUrl} />;
+        }
 
-    // 3. Text
-    if (fileType === 'text') {
-        return <TextViewer fileUrl={fileUrl} />;
-    }
+        // 4. Excel
+        if (fileType === 'excel') {
+            return <ExcelViewer fileUrl={fileUrl} />;
+        }
 
-    // 4. Excel
-    if (fileType === 'excel') {
-        return <ExcelViewer fileUrl={fileUrl} />;
-    }
+        // 5. DOCX
+        if (fileType === 'docx') {
+            return <DocxViewer fileUrl={fileUrl} />;
+        }
 
-    // 5. DOCX
-    if (fileType === 'docx') {
-        return <DocxViewer fileUrl={fileUrl} />;
-    }
+        return <div className="p-10 text-gray-500">Unsupported file type</div>;
+    };
 
-    return <div className="p-10 text-gray-500">Unsupported file type</div>;
+    // If it's NOT a PDF (or even if it is, though Workspace handles PDFs specifically), render with toolbar
+    // Workspace uses PDFViewerWrapper for PDFs, so this toolbar is mainly for non-PDFs.
+    // However, if DocumentViewer IS used for PDFs here, we add the toolbar too.
+    return (
+        <div className="flex flex-col h-full bg-muted/30">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border/50 bg-background">
+                 <div className="flex items-center gap-2">
+                    <FileSelectorDropdown
+                        files={files}
+                        selectedId={selectedFileId}
+                        onSelect={onSelectFile}
+                        onRemove={onRemoveFile}
+                    />
+                 </div>
+            </div>
+            <div className="flex-1 overflow-auto">
+                {renderContent()}
+            </div>
+        </div>
+    );
 });
 
 // --- Sub-Components ---

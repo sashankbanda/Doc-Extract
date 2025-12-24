@@ -1,8 +1,28 @@
 import { ModeToggle } from "@/components/mode-toggle";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { useDocumentContext } from "@/context/DocumentContext";
+import { apiResetSession } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
-import { FileText, Layers, Upload } from "lucide-react";
-import { Link, useLocation } from "react-router-dom";
+import { FileText, Layers, RotateCcw, Upload } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 const navItems = [
   { href: "/", label: "Home", icon: FileText },
@@ -12,6 +32,8 @@ const navItems = [
 
 export function AppHeader() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { clearDocuments } = useDocumentContext();
 
   return (
     <motion.header
@@ -58,8 +80,57 @@ export function AppHeader() {
             );
           })}
         </nav>
-        <div className="ml-4 pl-4 border-l border-border/50">
+        <div className="ml-4 pl-4 border-l border-border/50 flex items-center gap-2">
           <ModeToggle />
+          <TooltipProvider>
+          <TooltipProvider>
+            <AlertDialog>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-muted-foreground hover:text-destructive"
+                    >
+                      <RotateCcw className="w-5 h-5" />
+                    </Button>
+                  </AlertDialogTrigger>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Reset Session</p>
+                </TooltipContent>
+              </Tooltip>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Reset Session</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Are you sure you want to reset the session? This will clear all uploaded files and their extracted data. This action cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={async () => {
+                      try {
+                        await apiResetSession();
+                        clearDocuments();
+                        navigate("/upload");
+                      } catch (err) {
+                        console.error("Failed to reset session:", err);
+                        clearDocuments();
+                        navigate("/upload");
+                      }
+                    }}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    Reset Session
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </TooltipProvider>
+          </TooltipProvider>
         </div>
       </div>
     </motion.header>
