@@ -1,5 +1,6 @@
-import { StructuredItem } from '@/lib/api';
+import { StructuredItem, structureDocument } from '@/lib/api';
 import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
+import { toast } from 'sonner';
 
 export interface ComparisonRow {
     key: string;
@@ -42,6 +43,9 @@ interface ComparisonContextType {
     // Update Logic
     updateItem: (model: 'A' | 'B', index: number, newKey: string, newValue: string) => void;
     whisperHash: string | undefined | null;
+    loadingA: boolean;
+    loadingB: boolean;
+    runComparison: () => Promise<void>;
 }
 
 const ComparisonContext = createContext<ComparisonContextType | undefined>(undefined);
@@ -62,7 +66,7 @@ export function ComparisonProvider({ children, whisperHash }: { children: ReactN
 
     // Default models (matching the first two in AVAILABLE_MODELS)
     const [modelA, setModelA] = useState<string>(() => loadState("modelA", "groq/llama-3.3-70b-versatile"));
-    const [modelB, setModelB] = useState<string>(() => loadState("modelB", "gemini/gemini-1.5-flash")); 
+    const [modelB, setModelB] = useState<string>(() => loadState("modelB", "gemini/gemini-2.5-flash")); // Updated default
 
     const [customModelA, setCustomModelA] = useState(() => loadState("customModelA", ""));
     const [customModelB, setCustomModelB] = useState(() => loadState("customModelB", ""));
@@ -72,6 +76,10 @@ export function ComparisonProvider({ children, whisperHash }: { children: ReactN
     const [dataA, setDataA] = useState<StructuredItem[] | null>(() => loadState("dataA", null));
     const [dataB, setDataB] = useState<StructuredItem[] | null>(() => loadState("dataB", null));
     
+    // Loading states moved to context
+    const [loadingA, setLoadingA] = useState(false);
+    const [loadingB, setLoadingB] = useState(false);
+
     const [filter, setFilter] = useState<"all" | "mismatch" | "match">(() => loadState("filter", "all"));
 
     // Keyed by source_key. Stores the definitive value.
@@ -104,6 +112,8 @@ export function ComparisonProvider({ children, whisperHash }: { children: ReactN
     const resetComparisonState = () => {
         setDataA(null);
         setDataB(null);
+        setLoadingA(false);
+        setLoadingB(false);
         setFilter("all");
         setApprovedItems({});
         setDeletedKeys(new Set());
@@ -112,6 +122,51 @@ export function ComparisonProvider({ children, whisperHash }: { children: ReactN
              localStorage.removeItem(`comparison_${whisperHash}_dataB`);
              // We can keep the selected models as preference
         }
+    };
+    
+    // Run Comparison Logic
+    const runComparison = async () => {
+        if (!whisperHash) {
+            toast.error("No active document selected for comparison");
+            return;
+        }
+        
+        const effectiveModelA = isCustomA ? customModelA : modelA;
+        const effectiveModelB = isCustomB ? customModelB : modelB;
+        
+        if (!effectiveModelA || !effectiveModelB) {
+            toast.error("Please select models for both panels");
+            return;
+        }
+
+        setLoadingA(true);
+        setLoadingB(true);
+        
+        // Launch A
+        const promiseA = structureDocument(whisperHash, effectiveModelA, true)
+            .then(res => {
+                setDataA(res.items);
+                toast.success(`Model A (${effectiveModelA}) complete`);
+            })
+            .catch(err => {
+                console.error("Model A failed", err);
+                toast.error(`Model A failed: ${err.message}`);
+            })
+            .finally(() => setLoadingA(false));
+
+        // Launch B
+        const promiseB = structureDocument(whisperHash, effectiveModelB, true)
+            .then(res => {
+                setDataB(res.items);
+                toast.success(`Model B (${effectiveModelB}) complete`);
+            })
+            .catch(err => {
+                console.error("Model B failed", err);
+                toast.error(`Model B failed: ${err.message}`);
+            })
+            .finally(() => setLoadingB(false));
+            
+        await Promise.all([promiseA, promiseB]);
     };
 
     // Calculate Comparison Rows centrally
@@ -260,6 +315,9 @@ export function ComparisonProvider({ children, whisperHash }: { children: ReactN
         dataB,
         setDataA,
         setDataB,
+        loadingA,
+        loadingB,
+        runComparison,
         filter,
         setFilter,
         resetComparisonState,

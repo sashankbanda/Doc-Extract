@@ -1,12 +1,11 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useComparisonContext } from "@/context/ComparisonContext";
-import { getStructuredDocument, structureDocument } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { Check, CheckCircle2, Edit2, Trash2, X } from "lucide-react";
+import { ArrowRight, Check, CheckCircle2, Edit2, Loader2, Play, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { toast } from "sonner";
 
 // Available models
 const AVAILABLE_MODELS = [
@@ -152,6 +151,9 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
         isCustomB, setIsCustomB,
         dataA, setDataA,
         dataB, setDataB,
+        loadingA,
+        loadingB,
+        runComparison,
         filter, setFilter,
         comparisonRows,
         approvedItems, 
@@ -160,11 +162,7 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
         deleteItem
     } = useComparisonContext();
     
-    // ... (rest of local state) ...
-    // Note: I will only replace the rendering part, but since this tool replaces chunks, I need the context destructuring to be updated too.
-    
-    const [loadingA, setLoadingA] = useState(false);
-    const [loadingB, setLoadingB] = useState(false);
+    // Local run extraction removed, using context runComparison
 
     const containerRef = useRef<HTMLDivElement>(null);
     const [isNarrow, setIsNarrow] = useState(false);
@@ -180,69 +178,15 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
         return () => observer.disconnect();
     }, []);
     
-    // Load initial data for Model A if available (Baseline)
-    useEffect(() => {
-        if (!whisperHash) return;
-        
-        // Only load if dataA is empty (first time or clear)
-        if (!dataA) {
-            // Try to load existing data for the initial view (assuming it was run with default model)
-            const loadInitial = async () => {
-                try {
-                    const existing = await getStructuredDocument(whisperHash);
-                    if (existing && existing.items) {
-                        setDataA(existing.items);
-                    }
-                } catch (e) {
-                    // ignore
-                }
-            };
-            loadInitial();
-        }
-    }, [whisperHash, dataA, setDataA]);
-
-    const handleRunComparison = async () => {
-        if (!whisperHash) return;
-        
-        const effectiveModelA = isCustomA ? customModelA : modelA;
-        const effectiveModelB = isCustomB ? customModelB : modelB;
-        
-        if (!effectiveModelA || !effectiveModelB) {
-            toast.error("Please select models for both panels");
-            return;
-        }
-
-        // Run in parallel
-        setLoadingA(true);
-        setLoadingB(true);
-        
-        // Launch A
-        const promiseA = structureDocument(whisperHash, effectiveModelA, true)
-            .then(res => {
-                setDataA(res.items);
-                toast.success(`Model A (${effectiveModelA}) complete`);
-            })
-            .catch(err => {
-                console.error("Model A failed", err);
-                toast.error(`Model A failed: ${err.message}`);
-            })
-            .finally(() => setLoadingA(false));
-
-        // Launch B
-        const promiseB = structureDocument(whisperHash, effectiveModelB, true)
-            .then(res => {
-                setDataB(res.items);
-                toast.success(`Model B (${effectiveModelB}) complete`);
-            })
-            .catch(err => {
-                console.error("Model B failed", err);
-                toast.error(`Model B failed: ${err.message}`);
-            })
-            .finally(() => setLoadingB(false));
-            
-        await Promise.all([promiseA, promiseB]);
-    };
-
+    // Load initial data logic kept for now, but context usually handles state. 
+    // If context loads from localStorage, this effect might be redundant or safe to keep as sync.
+    // We'll keep it simple: relying on Context's internal initialization mostly, 
+    // but if we want to ensure data pulls from API on fresh load if empty (and available on server), we can keep it.
+    // For now, let's trust the Context's localStorage init.
+    // Actually, the original code loaded from `getStructuredDocument`. The Context loads from `localStorage`. 
+    // If `localStorage` is empty, we might want to fetch? 
+    // The user's request focuses on explicitly running extraction. So let's leave auto-fetch out for now unless it was critical.
+    
     const filteredRows = useMemo(() => {
         if (filter === "all") return comparisonRows;
         if (filter === "mismatch") return comparisonRows.filter(r => !r.isMatch);
@@ -304,6 +248,16 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
             lastSelectionRef.current = { row: selectedRow, panel: selectedPanel };
         }
     }, [selectedRow, selectedPanel, filteredRows, onHighlight]);
+    
+    // Model Names for Headers
+    const getModelName = (id: string, isCustom: boolean, custom: string) => {
+        if (isCustom) return custom || "Custom Model";
+        const found = AVAILABLE_MODELS.find(m => m.id === id);
+        return found ? found.name : id;
+    };
+    
+    const nameA = getModelName(modelA, isCustomA, customModelA);
+    const nameB = getModelName(modelB, isCustomB, customModelB);
 
     return (
         <div 
@@ -316,11 +270,13 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
                 if (e.target === e.currentTarget) e.currentTarget.focus();
             }}
         >
-           {/* ... Header ... */}
-           {/* (I am skipping replacing the header code blocks to avoid huge diffs, will target the specific container) */}
-            <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 p-4 space-y-4">
-                 {/* ... content of header ... */}
-                 {/* I will invoke replace_file_content separately for the header if needed, but the main change is the ScrollArea content */}
+             <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 p-4 space-y-4">
+                {/* Header Actions */}
+                <div className="flex items-center justify-between">
+                     <h2 className="text-lg font-semibold tracking-tight">Compare Models</h2>
+                     {/* We can put header actions here if needed */}
+                </div>
+
                 {/* Filters */}
                 <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2 bg-muted/50 p-1 rounded-md border text-xs">
@@ -360,133 +316,191 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
                 "flex-1 overflow-hidden grid min-h-0",
                 isNarrow ? "grid-cols-1 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] divide-y" : "grid-cols-2 grid-rows-[minmax(0,1fr)] divide-x"
             )}>
-                {/* Panel A */}
-                <ScrollArea className="h-full bg-card/30 min-w-0">
-                    <div className="p-4 space-y-1">
-                        {!dataA && !loadingA && (
-                            <div className="text-center text-muted-foreground py-10 text-sm">
-                                No data loaded. Run comparison to start.
-                            </div>
-                        )}
-                        {filteredRows.map((row, i) => {
-                           const isSelected = selectedRow === i && selectedPanel === 'A';
-                           return (
-                           <div 
-                                key={`a-${i}`}
-                                id={`row-a-${i}`}
-                                onClick={() => {
-                                    // Highlight handled by effect
-                                    setSelectedRow(i);
-                                    setSelectedPanel('A');
-                                }}
-                                className={cn(
-                                   "p-3 rounded border text-sm grid gap-1 cursor-pointer transition-colors group",
-                                   !isSelected && "hover:bg-muted/50",
-                                   isSelected ? "bg-accent border-primary ring-1 ring-primary/20" : "border-border",
-                                   !row.isMatch && !isSelected && "border-destructive/20 bg-destructive/5"
-                               )}
-                           >
-                               <div className="flex justify-between items-center">
-                                    <div className="flex items-center gap-2">
-                                        <div className="font-semibold text-xs text-muted-foreground uppercase tracking-wider">{row.key}</div>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-4 w-4 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                if (window.confirm("Are you sure you want to delete this row? This action will remove it from the final result.")) {
-                                                    deleteItem(row.key);
-                                                }
-                                            }}
-                                        >
-                                            <Trash2 className="w-3 h-3" />
-                                        </Button>
-                                    </div>
-                                    {row.sortKey !== Number.MAX_SAFE_INTEGER && (
-                                        <div className="text-[10px] text-muted-foreground opacity-50">L{row.sortKey}</div>
-                                    )}
-                               </div>
-                               <ComparisonCell 
-                                    model="A"
-                                    index={row.indexA}
-                                    uniqueKey={row.key}
-                                    rawKey={row.key.replace(/ \[\d+\]$/, '')}
-                                    value={row.valA}
-                                    isMatch={row.isMatch}
-                                    isApproved={approvedItems[row.key] === row.valA}
-                                    onApprove={approveItem}
-                                    onUpdate={updateItem}
-                               />
-                           </div> 
-                           );
-                        })}
+                {/* Empty State / Single Run Button */}
+                {(!dataA && !dataB && !loadingA && !loadingB) && (
+                    <div className="col-span-2 flex flex-col items-center justify-center p-8 space-y-4 text-center">
+                         <div className="p-4 rounded-full bg-muted/50 mb-2">
+                            <ArrowRight className="w-8 h-8 text-muted-foreground/50" />
+                         </div>
+                         <h3 className="text-lg font-semibold text-foreground">Ready to Compare</h3>
+                         <p className="text-sm text-muted-foreground max-w-sm">
+                             Extract data using two different models to compare their accuracy and performance.
+                         </p>
+                         <Button onClick={runComparison} size="lg" className="mt-4">
+                             <Play className="w-4 h-4 mr-2" />
+                             Run Extraction
+                         </Button>
+                         <div className="text-xs text-muted-foreground mt-4 grid grid-cols-2 gap-x-8 gap-y-1 text-left border p-3 rounded-md bg-muted/20">
+                             <span className="font-medium">Model A:</span> <span>{nameA}</span>
+                             <span className="font-medium">Model B:</span> <span>{nameB}</span>
+                         </div>
                     </div>
-                </ScrollArea>
+                )}
                 
-                {/* Panel B */}
-                 <ScrollArea className="h-full bg-card/30 min-w-0">
-                    <div className="p-4 space-y-1">
-                        {!dataB && !loadingB && (
-                            <div className="text-center text-muted-foreground py-10 text-sm">
-                                No data loaded. Run comparison to start.
-                            </div>
-                        )}
-                        {filteredRows.map((row, i) => {
-                           const isSelected = selectedRow === i && selectedPanel === 'B';
-                           return (
-                           <div 
-                                key={`b-${i}`} 
-                                id={`row-b-${i}`}
-                                onClick={() => {
-                                    // Highlight handled by effect
-                                    setSelectedRow(i);
-                                    setSelectedPanel('B');
-                                }}
-                                className={cn(
-                                   "p-3 rounded border text-sm grid gap-1 cursor-pointer transition-colors group",
-                                   !isSelected && "hover:bg-muted/50",
-                                   isSelected ? "bg-accent border-primary ring-1 ring-primary/20" : "border-border",
-                                   !row.isMatch && !isSelected && "border-destructive/20 bg-destructive/5"
-                               )}
-                           >
-                                <div className="flex justify-between items-center">
-                                    <div className="flex items-center gap-2">
-                                        <div className="font-semibold text-xs text-muted-foreground uppercase tracking-wider">{row.key}</div>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-4 w-4 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                if (window.confirm("Are you sure you want to delete this row? This action will remove it from the final result.")) {
-                                                    deleteItem(row.key);
-                                                }
-                                            }}
-                                        >
-                                            <Trash2 className="w-3 h-3" />
-                                        </Button>
+                {/* Show content if we have data OR are loading */}
+                {((dataA || dataB) || (loadingA || loadingB)) && (
+                    <>
+                    {/* Panel A */}
+                    <div className="flex flex-col h-full min-w-0">
+                        {/* Column Header */}
+                        <div className="bg-muted/30 border-b px-4 py-2 text-xs font-medium text-muted-foreground flex items-center justify-between sticky top-0 z-10 backdrop-blur-sm">
+                             <span className="truncate max-w-[80%]">{nameA}</span>
+                             {loadingA && <Loader2 className="w-3 h-3 animate-spin text-primary" />}
+                        </div>
+                        <ScrollArea className="flex-1 bg-card/30">
+                            <div className="p-4 space-y-1">
+                                {loadingA && !dataA && (
+                                     <div className="space-y-3 py-2">
+                                         {Array.from({length: 6}).map((_, i) => (
+                                             <div key={i} className="space-y-2 p-3 border rounded-md">
+                                                 <Skeleton className="h-3 w-24" />
+                                                 <Skeleton className="h-4 w-full" />
+                                             </div>
+                                         ))}
+                                     </div>
+                                )}
+                                {!loadingA && !dataA && (
+                                    <div className="text-center text-muted-foreground py-10 text-sm italic">
+                                        No data returned from Model A.
                                     </div>
-                                    {row.sortKey !== Number.MAX_SAFE_INTEGER && (
-                                        <div className="text-[10px] text-muted-foreground opacity-50">L{row.sortKey}</div>
-                                    )}
-                               </div>
-                               <ComparisonCell 
-                                    model="B"
-                                    index={row.indexB}
-                                    uniqueKey={row.key}
-                                    rawKey={row.key.replace(/ \[\d+\]$/, '')}
-                                    value={row.valB}
-                                    isMatch={row.isMatch}
-                                    isApproved={approvedItems[row.key] === row.valB}
-                                    onApprove={approveItem}
-                                    onUpdate={updateItem}
-                               />
-                           </div> 
-                           );
-                        })}
+                                )}
+                                {filteredRows.map((row, i) => {
+                                   const isSelected = selectedRow === i && selectedPanel === 'A';
+                                   return (
+                                   <div 
+                                        key={`a-${i}`}
+                                        id={`row-a-${i}`}
+                                        onClick={() => {
+                                            setSelectedRow(i);
+                                            setSelectedPanel('A');
+                                        }}
+                                        className={cn(
+                                           "p-3 rounded border text-sm grid gap-1 cursor-pointer transition-colors group",
+                                           !isSelected && "hover:bg-muted/50",
+                                           isSelected ? "bg-accent border-primary ring-1 ring-primary/20" : "border-border",
+                                           !row.isMatch && !isSelected && "border-destructive/20 bg-destructive/5"
+                                       )}
+                                   >
+                                       <div className="flex justify-between items-center">
+                                            <div className="flex items-center gap-2">
+                                                <div className="font-semibold text-xs text-muted-foreground uppercase tracking-wider">{row.key}</div>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-4 w-4 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        if (window.confirm("Are you sure you want to delete this row? This action will remove it from the final result.")) {
+                                                            deleteItem(row.key);
+                                                        }
+                                                    }}
+                                                >
+                                                    <Trash2 className="w-3 h-3" />
+                                                </Button>
+                                            </div>
+                                            {row.sortKey !== Number.MAX_SAFE_INTEGER && (
+                                                <div className="text-[10px] text-muted-foreground opacity-50">L{row.sortKey}</div>
+                                            )}
+                                       </div>
+                                       <ComparisonCell 
+                                            model="A"
+                                            index={row.indexA}
+                                            uniqueKey={row.key}
+                                            rawKey={row.key.replace(/ \[\d+\]$/, '')}
+                                            value={row.valA}
+                                            isMatch={row.isMatch}
+                                            isApproved={approvedItems[row.key] === row.valA}
+                                            onApprove={approveItem}
+                                            onUpdate={updateItem}
+                                       />
+                                   </div> 
+                                   );
+                                })}
+                            </div>
+                        </ScrollArea>
                     </div>
-                </ScrollArea>
+                    
+                    {/* Panel B */}
+                     <div className="flex flex-col h-full min-w-0">
+                        {/* Column Header */}
+                        <div className="bg-muted/30 border-b px-4 py-2 text-xs font-medium text-muted-foreground flex items-center justify-between sticky top-0 z-10 backdrop-blur-sm">
+                             <span className="truncate max-w-[80%]">{nameB}</span>
+                             {loadingB && <Loader2 className="w-3 h-3 animate-spin text-primary" />}
+                        </div>
+                         <ScrollArea className="flex-1 bg-card/30">
+                            <div className="p-4 space-y-1">
+                                {loadingB && !dataB && (
+                                     <div className="space-y-3 py-2">
+                                         {Array.from({length: 6}).map((_, i) => (
+                                             <div key={i} className="space-y-2 p-3 border rounded-md">
+                                                 <Skeleton className="h-3 w-24" />
+                                                 <Skeleton className="h-4 w-full" />
+                                             </div>
+                                         ))}
+                                     </div>
+                                )}
+                                {!loadingB && !dataB && (
+                                    <div className="text-center text-muted-foreground py-10 text-sm italic">
+                                        No data returned from Model B.
+                                    </div>
+                                )}
+                                {filteredRows.map((row, i) => {
+                                   const isSelected = selectedRow === i && selectedPanel === 'B';
+                                   return (
+                                   <div 
+                                        key={`b-${i}`} 
+                                        id={`row-b-${i}`}
+                                        onClick={() => {
+                                            setSelectedRow(i);
+                                            setSelectedPanel('B');
+                                        }}
+                                        className={cn(
+                                           "p-3 rounded border text-sm grid gap-1 cursor-pointer transition-colors group",
+                                           !isSelected && "hover:bg-muted/50",
+                                           isSelected ? "bg-accent border-primary ring-1 ring-primary/20" : "border-border",
+                                           !row.isMatch && !isSelected && "border-destructive/20 bg-destructive/5"
+                                       )}
+                                   >
+                                        <div className="flex justify-between items-center">
+                                            <div className="flex items-center gap-2">
+                                                <div className="font-semibold text-xs text-muted-foreground uppercase tracking-wider">{row.key}</div>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-4 w-4 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        if (window.confirm("Are you sure you want to delete this row? This action will remove it from the final result.")) {
+                                                            deleteItem(row.key);
+                                                        }
+                                                    }}
+                                                >
+                                                    <Trash2 className="w-3 h-3" />
+                                                </Button>
+                                            </div>
+                                            {row.sortKey !== Number.MAX_SAFE_INTEGER && (
+                                                <div className="text-[10px] text-muted-foreground opacity-50">L{row.sortKey}</div>
+                                            )}
+                                       </div>
+                                       <ComparisonCell 
+                                            model="B"
+                                            index={row.indexB}
+                                            uniqueKey={row.key}
+                                            rawKey={row.key.replace(/ \[\d+\]$/, '')}
+                                            value={row.valB}
+                                            isMatch={row.isMatch}
+                                            isApproved={approvedItems[row.key] === row.valB}
+                                            onApprove={approveItem}
+                                            onUpdate={updateItem}
+                                       />
+                                   </div> 
+                                   );
+                                })}
+                            </div>
+                        </ScrollArea>
+                    </div>
+                    </>
+                )}
             </div>
         </div>
     );
