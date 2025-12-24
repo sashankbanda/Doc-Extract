@@ -197,6 +197,28 @@ export function PDFViewerWrapper({
     }
   };
 
+  // Fit to width helper
+  const fitToWidth = useCallback(async (doc: pdfjsLib.PDFDocumentProxy, containerWidth: number) => {
+      if (!doc || containerWidth <= 0) return;
+      
+      try {
+          const page = await doc.getPage(1);
+          const viewport = page.getViewport({ scale: 1 });
+          
+          // p-6 (48px) + scrollbar buffer (~16px) = ~64px
+          const availableWidth = containerWidth - 64; 
+          const fitScale = availableWidth / viewport.width;
+          
+          // Clamp min zoom to 20%, max to 150% (fit shouldn't explode small docs)
+          const targetZoom = Math.min(Math.max(20, Math.floor(fitScale * 100)), 150);
+          
+          console.log(`[PDFViewerWrapper] Fitting to width: Container=${containerWidth}, Page=${viewport.width}, Zoom=${targetZoom}%`);
+          setZoom(targetZoom);
+      } catch (e) {
+          console.warn("[PDFViewerWrapper] Error calculating fit zoom:", e);
+      }
+  }, []);
+
   // Load PDF
   useEffect(() => {
     if (!pdfUrl) return;
@@ -207,13 +229,69 @@ export function PDFViewerWrapper({
         const doc = await loadingTask.promise;
         setPdfDoc(doc);
         setTotalPages(doc.numPages);
+        
+        // Try initial fit if container is ready
+        if (containerRef.current) {
+            fitToWidth(doc, containerRef.current.clientWidth);
+        }
       } catch (error) {
         console.error("[PDFViewerWrapper] Error loading PDF:", error);
       }
     };
 
     loadPdf();
-  }, [pdfUrl]);
+  }, [pdfUrl, fitToWidth]);
+
+  // Handle Resize for initial fit
+  useEffect(() => {
+      if (!containerRef.current || !pdfDoc) return;
+      
+      // Only fit automatically if we haven't manually zoomed? 
+      // For now, let's just ensure we fit at least once on load.
+      // We can use a ref to track if 'initial fit' is done for this current doc.
+      // But simpler: Just rely on the ResizeObserver to catch the first stable width.
+      
+      const observer = new ResizeObserver(entries => {
+          for (const entry of entries) {
+              if (entry.contentRect.width > 0) {
+                 // We could limit this to run only once per document load if desired.
+                 // But since the user might resize the pane, auto-refitting might be annoying if they zoomed in.
+                 // Ideally we only do it on "mount" / "doc change".
+                 // BUT: The previous attempt failed because measuring happened too early.
+                 // So we need to ensure it runs when layout is ready.
+                 
+                 // Let's rely on the dependency logic: This effect runs when pdfDoc changes.
+                 // We just want to trigger it once.
+              }
+          }
+      });
+      observer.observe(containerRef.current);
+      return () => observer.disconnect();
+  }, [pdfDoc]);
+
+  // Use a ref to track if we've performed the initial fit for the *current* pdfDoc
+  const initialFitDoneRef = useRef<string | null>(null);
+
+  useEffect(() => {
+      if (!containerRef.current || !pdfDoc || !pdfUrl) return;
+      
+      if (initialFitDoneRef.current === pdfUrl) return; // Already fitted this doc
+
+      const observer = new ResizeObserver(entries => {
+          for (const entry of entries) {
+              if (entry.contentRect.width > 0) {
+                  fitToWidth(pdfDoc, entry.contentRect.width);
+                  initialFitDoneRef.current = pdfUrl; // Mark as done
+                  observer.disconnect(); // Stop observing once fitted
+                  break;
+              }
+          }
+      });
+      
+      observer.observe(containerRef.current);
+      return () => observer.disconnect();
+  }, [pdfDoc, pdfUrl, fitToWidth]);
+
 
   // Render PDF pages
   useEffect(() => {
@@ -226,17 +304,22 @@ export function PDFViewerWrapper({
 
         try {
           const page = await pdfDoc.getPage(pageNum);
-          // Use a fixed scale for consistent rendering, zoom affects display size
-          const baseScale = 1.5; // Base scale for rendering
-          const viewport = page.getViewport({ scale: baseScale });
           
-          // Set canvas size based on zoom
-          const displayWidth = viewport.width * (zoom / 100);
-          const displayHeight = viewport.height * (zoom / 100);
+          // 1. Calculate Display Size (CSS) based on Zoom
+          // Scale 1 = 100% zoom = 72 DPI (Standard PDF point size)
+          const viewportStandard = page.getViewport({ scale: 1 });
+          const displayWidth = viewportStandard.width * (zoom / 100);
+          const displayHeight = viewportStandard.height * (zoom / 100);
           
-          // Set actual canvas resolution (for rendering quality)
-          canvas.width = viewport.width;
-          canvas.height = viewport.height;
+          // 2. Calculate Render Resolution (Canvas) for High DPI
+          // Use devicePixelRatio for crisp text, defaulting to at least 1.5 if ratio is low
+          const dpr = window.devicePixelRatio || 1;
+          const renderScale = (zoom / 100) * Math.max(dpr, 1.5);
+          const viewportRender = page.getViewport({ scale: renderScale });
+          
+          // Set canvas resolution
+          canvas.width = viewportRender.width;
+          canvas.height = viewportRender.height;
           
           // Set display size via CSS
           canvas.style.width = `${displayWidth}px`;
@@ -247,22 +330,23 @@ export function PDFViewerWrapper({
 
           const renderContext = {
             canvasContext: context,
-            viewport: viewport
+            viewport: viewportRender
           };
 
           await page.render(renderContext).promise;
           
-          // Store canvas dimensions for overlay positioning
+          // Store canvas dimensions for overlay positioning (use display size)
           setCanvasDimensions(prev => {
             const newMap = new Map(prev);
             newMap.set(pageNum, { width: displayWidth, height: displayHeight });
             return newMap;
           });
           
-          // Report dimensions at the actual rendering scale (for highlight calculations)
-          // These dimensions match what the canvas is actually rendered at
+          // Report dimensions at layout scale (typically standard viewport width/height is useful for relative coords)
+          // But our highlighter uses the display dimension percentages.
+          // Let's pass the standard viewport for coordinate mapping ref.
           if (onPageDimensions) {
-            onPageDimensions(pageNum, viewport.width, viewport.height);
+            onPageDimensions(pageNum, displayWidth, displayHeight);
           }
         } catch (error) {
           console.error(`[PDFViewerWrapper] Error rendering page ${pageNum}:`, error);
