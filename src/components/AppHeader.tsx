@@ -80,7 +80,7 @@ export function AppHeader() {
             );
           })}
         </nav>
-        <div className="ml-4 pl-4 border-l border-border/50 flex items-center gap-2">
+        <div className="flex items-center gap-2">
           <ModeToggle />
           <TooltipProvider>
           <TooltipProvider>
@@ -91,7 +91,7 @@ export function AppHeader() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="text-muted-foreground hover:text-destructive"
+                      className="text-muted-foreground hover:text-foreground hover:bg-muted/50"
                     >
                       <RotateCcw className="w-5 h-5" />
                     </Button>
