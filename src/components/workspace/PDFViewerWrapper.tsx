@@ -293,6 +293,9 @@ export function PDFViewerWrapper({
   }, [pdfDoc, pdfUrl, fitToWidth]);
 
 
+  // Track active render tasks to cancel them on update
+  const renderTasks = useRef<Map<number, any>>(new Map());
+
   // Render PDF pages
   useEffect(() => {
     if (!pdfDoc) return;
@@ -302,17 +305,25 @@ export function PDFViewerWrapper({
         const canvas = canvasRefs.current.get(pageNum);
         if (!canvas) continue;
 
+        // Cancel previous render task if it exists
+        if (renderTasks.current.has(pageNum)) {
+            try {
+                renderTasks.current.get(pageNum).cancel();
+            } catch (ignore) {
+                // Ignore cancel errors
+            }
+            renderTasks.current.delete(pageNum);
+        }
+
         try {
           const page = await pdfDoc.getPage(pageNum);
           
           // 1. Calculate Display Size (CSS) based on Zoom
-          // Scale 1 = 100% zoom = 72 DPI (Standard PDF point size)
           const viewportStandard = page.getViewport({ scale: 1 });
           const displayWidth = viewportStandard.width * (zoom / 100);
           const displayHeight = viewportStandard.height * (zoom / 100);
           
           // 2. Calculate Render Resolution (Canvas) for High DPI
-          // Use devicePixelRatio for crisp text, defaulting to at least 1.5 if ratio is low
           const dpr = window.devicePixelRatio || 1;
           const renderScale = (zoom / 100) * Math.max(dpr, 1.5);
           const viewportRender = page.getViewport({ scale: renderScale });
@@ -333,7 +344,13 @@ export function PDFViewerWrapper({
             viewport: viewportRender
           };
 
-          await page.render(renderContext).promise;
+          const task = page.render(renderContext);
+          renderTasks.current.set(pageNum, task);
+
+          await task.promise;
+          
+          // Success, remove from tracking
+          renderTasks.current.delete(pageNum);
           
           // Store canvas dimensions for overlay positioning (use display size)
           setCanvasDimensions(prev => {
@@ -342,19 +359,27 @@ export function PDFViewerWrapper({
             return newMap;
           });
           
-          // Report dimensions at layout scale (typically standard viewport width/height is useful for relative coords)
-          // But our highlighter uses the display dimension percentages.
-          // Let's pass the standard viewport for coordinate mapping ref.
           if (onPageDimensions) {
             onPageDimensions(pageNum, displayWidth, displayHeight);
           }
-        } catch (error) {
-          console.error(`[PDFViewerWrapper] Error rendering page ${pageNum}:`, error);
+        } catch (error: any) {
+          // Ignore cancelled errors
+          if (error.name !== 'RenderingCancelledException') {
+              console.error(`[PDFViewerWrapper] Error rendering page ${pageNum}:`, error);
+          }
         }
       }
     };
 
     renderPages();
+    
+    // Cleanup function to cancel all on unmount/re-run
+    return () => {
+        renderTasks.current.forEach(task => {
+            try { task.cancel(); } catch (e) {}
+        });
+        renderTasks.current.clear();
+    };
   }, [pdfDoc, zoom, onPageDimensions]);
 
   // Track current page based on scroll position
