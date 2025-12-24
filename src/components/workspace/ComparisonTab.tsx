@@ -238,7 +238,18 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
 
         if (selectedRow !== null && filteredRows[selectedRow]) {
             const row = filteredRows[selectedRow];
-            onHighlight?.(row.lineNumbers);
+            
+            // Highlight based on selected panel
+            const linesToHighlight = selectedPanel === 'A' ? row.lineNumbersA : row.lineNumbersB;
+            
+            // If the specific panel has no lines (e.g. missing value), falling back to other panel might be misleading.
+            // But showing *nothing* might feel broken.
+            // Current decision: Accuracy is paramount. Show only what the selected model "saw".
+            // If it saw nothing, show nothing. 
+            // Exception: If both are empty (rare if data exists), maybe fallback to allLines? 
+            // Let's stick to specific lines first.
+            
+            onHighlight?.(linesToHighlight || []);
             
             // Scroll into view
             const element = document.getElementById(`row-${selectedPanel.toLowerCase()}-${selectedRow}`);

@@ -55,7 +55,24 @@ export function ResultTab({ onHighlight }: ResultTabProps) {
 
         if (selectedIndex !== null && filteredRows[selectedIndex]) {
             const row = filteredRows[selectedIndex];
-            onHighlight?.(row.lineNumbers);
+            
+            let lines: number[] = [];
+            const approvedVal = approvedItems[row.key];
+            
+            if (approvedVal !== undefined) {
+                // If specific approval matches a model, use its lines
+                if (approvedVal === row.valA) {
+                    lines = row.lineNumbersA;
+                } else if (approvedVal === row.valB) {
+                    lines = row.lineNumbersB;
+                }
+                // If custom edit (matches neither), highlight nothing to avoid confusion
+            } else if (row.isMatch) {
+                // If auto-match, prefer Model A's lines (primary) to avoid union noise
+                lines = row.lineNumbersA;
+            }
+            
+            onHighlight?.(lines);
 
             // Scroll into view
             const el = document.getElementById(`result-row-${selectedIndex}`);

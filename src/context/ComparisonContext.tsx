@@ -8,6 +8,8 @@ export interface ComparisonRow {
     valB: string;
     isMatch: boolean;
     lineNumbers: number[];
+    lineNumbersA: number[];
+    lineNumbersB: number[];
     sortKey: number;
     // Source Indices for editing
     indexA?: number;
@@ -239,6 +241,8 @@ export function ComparisonProvider({ children, whisperHash }: { children: ReactN
                     valB: displayB,
                     isMatch,
                     lineNumbers: allLines,
+                    lineNumbersA: linesA,
+                    lineNumbersB: linesB,
                     sortKey: minLine,
                     indexA: entryA?.originalIndex,
                     indexB: entryB?.originalIndex
