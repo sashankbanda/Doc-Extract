@@ -23,9 +23,9 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 type TabType = "text" | "compare" | "result";
 
 const tabs: { id: TabType; label: string; icon: typeof FileText }[] = [
-  { id: "text", label: "Raw Text", icon: FileText },
-  { id: "compare", label: "Compare Models", icon: GitCompare },
   { id: "result", label: "Result", icon: CheckCircle2 },
+  { id: "compare", label: "Compare Models", icon: GitCompare },
+  { id: "text", label: "Raw Text", icon: FileText },
 ];
 
 export default function Workspace() {
@@ -59,7 +59,7 @@ export default function Workspace() {
   const [lineMetadata, setLineMetadata] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<TabType>("text");
+  const [activeTab, setActiveTab] = useState<TabType>("result");
   const [hoveredBoundingBox, setHoveredBoundingBox] = useState<BoundingBox | null>(null);
   const [activeBoundingBox, setActiveBoundingBox] = useState<BoundingBox | null>(null);
   const [secondaryHighlights, setSecondaryHighlights] = useState<BoundingBox[]>([]);
