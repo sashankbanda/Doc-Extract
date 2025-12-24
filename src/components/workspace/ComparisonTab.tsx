@@ -1,24 +1,10 @@
-import { ApiKeyManager } from "@/components/settings/ApiKeyManager";
-import {
-    Accordion,
-    AccordionContent,
-    AccordionItem,
-    AccordionTrigger,
-} from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select";
 import { useComparisonContext } from "@/context/ComparisonContext";
 import { getStructuredDocument, structureDocument } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { Check, CheckCircle2, Edit2, Loader2, Play, Settings2, Trash2, X } from "lucide-react";
+import { Check, CheckCircle2, Edit2, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -170,7 +156,8 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
         comparisonRows,
         approvedItems, 
         approveItem,
-        updateItem
+        updateItem,
+        deleteItem
     } = useComparisonContext();
     
     // ... (rest of local state) ...
@@ -334,87 +321,6 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
             <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 p-4 space-y-4">
                  {/* ... content of header ... */}
                  {/* I will invoke replace_file_content separately for the header if needed, but the main change is the ScrollArea content */}
-                 <Accordion type="single" collapsible className="w-full border rounded-lg bg-card" defaultValue="settings">
-                    <AccordionItem value="settings" className="border-none">
-                        <AccordionTrigger className="px-4 py-2 hover:no-underline">
-                            <div className="flex items-center gap-2">
-                                <Settings2 className="w-4 h-4 text-primary" />
-                                <span className="font-semibold text-sm">Comparison Settings</span>
-                                <span className="text-xs text-muted-foreground ml-2 font-normal">
-                                    Configure models and API keys
-                                </span>
-                            </div>
-                        </AccordionTrigger>
-                        <AccordionContent className="px-4 pb-4 pt-0">
-                           <div className={cn("grid gap-6 pt-4", isNarrow ? "grid-cols-1" : "grid-cols-2")}>
-                                {/* Model Selection */}
-                                <div className="space-y-4 border rounded-md p-4 bg-muted/20">
-                                    <div className="flex items-center justify-between">
-                                        <h3 className="font-medium text-sm">Model Selection</h3>
-                                        <Button size="sm" onClick={handleRunComparison} disabled={loadingA || loadingB}>
-                                            {(loadingA || loadingB) ? <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" /> : <Play className="w-3.5 h-3.5 mr-2" />}
-                                            Run Comparison
-                                        </Button>
-                                    </div>
-                                    
-                                    <div className={cn("grid gap-4", isNarrow ? "grid-cols-1" : "grid-cols-2")}>
-                                        {/* Model A */}
-                                        <div className="space-y-2">
-                                            <div className="flex items-center justify-between">
-                                                <label className="text-xs font-medium text-muted-foreground">Model A (Baseline)</label>
-                                                <Button variant="ghost" size="sm" onClick={() => setIsCustomA(!isCustomA)} className="h-5 text-[10px] px-2">
-                                                    {isCustomA ? "Use Preset" : "Use Custom"}
-                                                </Button>
-                                            </div>
-                                            {isCustomA ? (
-                                                 <Input placeholder="provider/model-name" value={customModelA} onChange={e => setCustomModelA(e.target.value)} className="h-8 text-xs" />
-                                            ) : (
-                                                <Select value={modelA} onValueChange={setModelA}>
-                                                    <SelectTrigger className="h-8 text-xs">
-                                                        <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        {AVAILABLE_MODELS.map(m => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}
-                                                    </SelectContent>
-                                                </Select>
-                                            )}
-                                            {loadingA && <div className="text-xs text-blue-500 flex items-center"><Loader2 className="w-3 h-3 mr-1 animate-spin"/>Extracting...</div>}
-                                        </div>
-
-                                        {/* Model B */}
-                                        <div className="space-y-2">
-                                            <div className="flex items-center justify-between">
-                                                <label className="text-xs font-medium text-muted-foreground">Model B (Challenger)</label>
-                                                 <Button variant="ghost" size="sm" onClick={() => setIsCustomB(!isCustomB)} className="h-5 text-[10px] px-2">
-                                                    {isCustomB ? "Use Preset" : "Use Custom"}
-                                                </Button>
-                                            </div>
-                                             {isCustomB ? (
-                                                 <Input placeholder="provider/model-name" value={customModelB} onChange={e => setCustomModelB(e.target.value)} className="h-8 text-xs" />
-                                            ) : (
-                                                <Select value={modelB} onValueChange={setModelB}>
-                                                    <SelectTrigger className="h-8 text-xs">
-                                                        <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        {AVAILABLE_MODELS.map(m => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}
-                                                    </SelectContent>
-                                                </Select>
-                                            )}
-                                           {loadingB && <div className="text-xs text-blue-500 flex items-center"><Loader2 className="w-3 h-3 mr-1 animate-spin"/>Extracting...</div>}
-                                        </div>
-                                    </div>
-                                </div>
-                                
-                                {/* API Key Manager */}
-                                <div className="space-y-2">
-                                    <ApiKeyManager />
-                                </div>
-                           </div>
-                        </AccordionContent>
-                    </AccordionItem>
-                </Accordion>
-                
                 {/* Filters */}
                 <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2 bg-muted/50 p-1 rounded-md border text-xs">

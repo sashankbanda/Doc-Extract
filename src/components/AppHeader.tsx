@@ -1,5 +1,11 @@
 import { ModeToggle } from "@/components/mode-toggle";
 import {
+    Accordion,
+    AccordionContent,
+    AccordionItem,
+    AccordionTrigger,
+} from "@/components/ui/accordion";
+import {
     AlertDialog,
     AlertDialogAction,
     AlertDialogCancel,
@@ -12,17 +18,20 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
-} from "@/components/ui/tooltip";
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from "@/components/ui/dialog";
 import { useDocumentContext } from "@/context/DocumentContext";
 import { apiResetSession } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
-import { FileText, Layers, RotateCcw, Upload } from "lucide-react";
+import { FileText, Layers, RotateCcw, Settings, Upload } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { ComparisonSettings } from "./workspace/ComparisonSettings";
 
 const navItems = [
   { href: "/", label: "Home", icon: FileText },
@@ -81,56 +90,92 @@ export function AppHeader() {
           })}
         </nav>
         <div className="flex items-center gap-2">
-          <ModeToggle />
-          <TooltipProvider>
-          <TooltipProvider>
-            <AlertDialog>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <AlertDialogTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                    >
-                      <RotateCcw className="w-5 h-5" />
+            <Dialog>
+                <DialogTrigger asChild>
+                    <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground hover:bg-muted/50">
+                        <Settings className="w-5 h-5" />
                     </Button>
-                  </AlertDialogTrigger>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Reset Session</p>
-                </TooltipContent>
-              </Tooltip>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Reset Session</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Are you sure you want to reset the session? This will clear all uploaded files and their extracted data. This action cannot be undone.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction
-                    onClick={async () => {
-                      try {
-                        await apiResetSession();
-                        clearDocuments();
-                        navigate("/upload");
-                      } catch (err) {
-                        console.error("Failed to reset session:", err);
-                        clearDocuments();
-                        navigate("/upload");
-                      }
-                    }}
-                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                  >
-                    Reset Session
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          </TooltipProvider>
-          </TooltipProvider>
+                </DialogTrigger>
+                <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle>Settings</DialogTitle>
+                        <DialogDescription>
+                            Configure application settings, models, and sessions.
+                        </DialogDescription>
+                    </DialogHeader>
+                    
+                    <div className="space-y-6 py-4">
+                        {/* Comparison Settings Section */}
+                        <Accordion type="single" collapsible defaultValue="comparison-models" className="w-full">
+                            <AccordionItem value="comparison-models" className="border-b">
+                                <AccordionTrigger className="hover:no-underline py-2">
+                                     <h3 className="text-sm font-medium">Comparison & Models</h3>
+                                </AccordionTrigger>
+                                <AccordionContent className="p-1">
+                                    <ComparisonSettings />
+                                </AccordionContent>
+                            </AccordionItem>
+                        </Accordion>
+
+                        {/* Appearance & Session Section */}
+                        <div className="space-y-4">
+                             <h3 className="text-sm font-medium border-b pb-2">Appearance & Session</h3>
+                             <div className="flex items-center justify-between">
+                                <div className="space-y-0.5">
+                                    <h4 className="text-sm font-medium">Appearance</h4>
+                                    <p className="text-xs text-muted-foreground">Toggle light/dark mode</p>
+                                </div>
+                                <ModeToggle />
+                             </div>
+                             
+                             <div className="flex items-center justify-between">
+                                <div className="space-y-0.5">
+                                    <h4 className="text-sm font-medium text-destructive">Reset Session</h4>
+                                    <p className="text-xs text-muted-foreground">Clear all data and start over</p>
+                                </div>
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button
+                                      variant="destructive"
+                                      size="sm"
+                                    >
+                                      <RotateCcw className="w-4 h-4 mr-2" />
+                                      Reset
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Reset Session</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        Are you sure you want to reset the session? This will clear all uploaded files and their extracted data. This action cannot be undone.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                      <AlertDialogAction
+                                        onClick={async () => {
+                                          try {
+                                            await apiResetSession();
+                                            clearDocuments();
+                                            navigate("/upload");
+                                          } catch (err) {
+                                            console.error("Failed to reset session:", err);
+                                            clearDocuments();
+                                            navigate("/upload");
+                                          }
+                                        }}
+                                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                      >
+                                        Reset Session
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                             </div>
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
       </div>
     </motion.header>
