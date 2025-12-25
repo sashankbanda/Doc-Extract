@@ -51,3 +51,22 @@ async def save_export_result(request: ExportRequest):
     except Exception as e:
         print(f"Export failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/export/download/{whisper_hash}")
+async def download_export_result(whisper_hash: str):
+    """
+    Download the saved result JSON for a given hash.
+    """
+    from fastapi.responses import FileResponse
+    
+    # Sanitize hash to match file_store saving logic
+    safe_hash = whisper_hash.replace("|", "_")
+    
+    # Construct filename
+    filename = f"{safe_hash}_result.json"
+    file_path = os.path.join(config.OUTPUT_DIR, filename)
+    
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Export file not found. Please click 'Finish Review' first.")
+        
+    return FileResponse(file_path, media_type="application/json", filename=filename)

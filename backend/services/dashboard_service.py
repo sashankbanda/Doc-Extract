@@ -94,40 +94,12 @@ class DashboardService:
             })
             
         # 2. Check for output files NOT in registry (Backward Compatibility)
-        output_files = glob.glob(os.path.join(config.OUTPUT_DIR, "*_result.json"))
-        for out_file in output_files:
-            basename = os.path.basename(out_file)
-            whisper_hash = basename.replace("_result.json", "")
-            
-            if whisper_hash in registry:
-                continue
-                
-            # If finding orphan result files, derive name
-            try:
-                with open(out_file, 'r', encoding='utf-8') as f:
-                    result_data = json.load(f)
-                    original_name = result_data.get('filename', whisper_hash)
-            except:
-                original_name = whisper_hash
+        # REMOVED: This was causing ghost files (e.g. results showing up as new docs).
+        # We rely on the Registry as the source of truth for Dashboard files.
+        # If we need to recover files, we should have a specific 'Recovery' tool/script.
+        
+        # Sort by status (Pending first) or date can be handled by frontend or here.
 
-            status = "Completed" # Assume completed if result exists but not in registry? Or Pending?
-            # Actually, if we found a result, it might be an old completed one.
-            # Let's say "Pending" unless we know otherwise, but maybe user wants to see them.
-            
-            lower_status = status.lower()
-            if lower_status == 'completed':
-                stats['completed'] += 1
-            else:
-                stats['pending'] += 1
-            stats['total'] += 1
-            
-            files_data.append({
-                "id": whisper_hash,
-                "filename": original_name,
-                "status": status,
-                "hash": whisper_hash
-            })
-            
         # Sort by status (Pending first) or date?
         # Let's simple append for now.
 
