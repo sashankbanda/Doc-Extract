@@ -37,6 +37,7 @@ const navItems = [
   { href: "/", label: "Home", icon: FileText },
   { href: "/upload", label: "Upload", icon: Upload },
   { href: "/workspace", label: "Workspace", icon: Layers },
+  { href: "/dashboard", label: "Dashboard", icon: FileText },
 ];
 
 export function AppHeader() {

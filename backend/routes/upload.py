@@ -3,6 +3,7 @@ from fastapi import APIRouter, UploadFile, File, HTTPException, Query
 from backend.services.file_store import file_store
 from backend.services.whisper_client import whisper_client
 from backend.services.mode_selector import select_mode
+from backend.services.dashboard_service import dashboard_service
 import os
 
 router = APIRouter()
@@ -54,6 +55,10 @@ async def upload_file(
         # To be safe and compliant with "Do NOT store anything in DB", file is DB.
         # Let's save as _status as well to keep the system working cohesively.
         file_store.save_json_output(whisper_hash, status_data, suffix="_status")
+        
+        # 5. Register in Dashboard
+        dashboard_service.register_file(whisper_hash, file.filename, status="Pending")
+        
         
         return {
             "whisper_hash": whisper_hash,

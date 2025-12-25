@@ -44,7 +44,7 @@ async def save_export_result(request: ExportRequest):
         }
         
         # Save using file_store
-        saved_path = file_store.save_json_output(request.whisper_hash, payload, suffix="_final_result")
+        saved_path = file_store.save_json_output(request.whisper_hash, payload, suffix="_result")
         
         return {"status": "success", "path": saved_path, "message": "Export saved successfully"}
         

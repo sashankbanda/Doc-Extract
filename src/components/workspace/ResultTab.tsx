@@ -4,7 +4,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useComparisonContext } from "@/context/ComparisonContext";
 import { cn } from "@/lib/utils";
-import { CheckCircle2, Download, Loader2, Play, Trash2 } from "lucide-react";
+import { CheckCircle2, Loader2, Play, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 interface ResultTabProps {
@@ -86,6 +86,27 @@ export function ResultTab({ onHighlight, onRequestCompare }: ResultTabProps) {
             lastSelectionRef.current = selectedIndex;
         }
     }, [selectedIndex, filteredRows, onHighlight]);
+
+    // Effect: Mark as In Progress when user makes first approval/edit
+    const hasUpdatedStatusRef = useRef(false);
+    useEffect(() => {
+        if (hasUpdatedStatusRef.current || !whisperHash) return;
+        
+        // Check if there are any approvals
+        const approvalCount = Object.keys(approvedItems).length;
+        if (approvalCount > 0) {
+            // Fire and forget status update
+             fetch("http://localhost:8005/dashboard/status", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    whisper_hash: whisperHash,
+                    status: "In Progress"
+                })
+            }).catch(console.error);
+            hasUpdatedStatusRef.current = true;
+        }
+    }, [approvedItems, whisperHash]);
 
     const handleExport = async () => {
         if (!whisperHash) return;
@@ -193,14 +214,86 @@ export function ResultTab({ onHighlight, onRequestCompare }: ResultTabProps) {
                 </div>
                 
                 <div className="flex items-center gap-2 flex-wrap justify-end">
-                    <Button size="sm" variant="default" className="h-9 gap-2 bg-green-600 hover:bg-green-700">
+                    <Button 
+                        size="sm" 
+                        variant="default" 
+                        className="h-9 gap-2 bg-green-600 hover:bg-green-700"
+                        onClick={async () => {
+                            if (!whisperHash) return;
+                            
+                            // 0. Validation: Ensure all items are resolved
+                             const unresolvedCount = comparisonRows.reduce((acc, row) => {
+                                const approvedVal = approvedItems[row.key];
+                                const isResolved = approvedVal !== undefined || row.isMatch;
+                                return isResolved ? acc : acc + 1;
+                            }, 0);
+
+                            if (unresolvedCount > 0) {
+                                alert(`Cannot finish review. There are ${unresolvedCount} unresolved items (marked in red). Please approve or edit them.`);
+                                
+                                // Auto-update status to In Progress since user tried to finish but couldn't
+                                try {
+                                     await fetch("http://localhost:8005/dashboard/status", {
+                                        method: "POST",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({
+                                            whisper_hash: whisperHash,
+                                            status: "In Progress"
+                                        })
+                                    });
+                                } catch (e) {
+                                    console.error("Failed to update status to In Progress", e);
+                                }
+                                return;
+                            }
+
+                            // 1. Prepare Export Data (Auto-save)
+                            const itemsToExport = comparisonRows.map(row => {
+                                const approvedVal = approvedItems[row.key];
+                                const isApproved = approvedVal !== undefined;
+                                const finalValue = isApproved ? approvedVal : (row.isMatch ? row.valA : "null");
+                                
+                                return {
+                                    key: row.key,
+                                    source_key: row.key.replace(/ \[\d+\]$/, ''),
+                                    value: finalValue,
+                                    line_numbers: row.lineNumbers,
+                                    is_approved: isApproved,
+                                    is_match: row.isMatch
+                                };
+                            });
+
+                            try {
+                                // 2. Save Result (Creates _result.json which Dashboard needs)
+                                await fetch("http://localhost:8005/export/save_result", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({
+                                        whisper_hash: whisperHash,
+                                        items: itemsToExport
+                                    })
+                                });
+
+                                // 3. Update Status
+                                await fetch("http://localhost:8005/dashboard/status", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({
+                                        whisper_hash: whisperHash,
+                                        status: "Completed"
+                                    })
+                                });
+                                
+                                // 4. Redirect
+                                window.location.href = "/dashboard";
+                            } catch (e) {
+                                console.error("Failed to finish review", e);
+                                alert("Failed to finish review. Please try again.");
+                            }
+                        }}
+                    >
                         <CheckCircle2 className="w-4 h-4" />
                         Finish Review
-                    </Button>
-                    
-                    <Button size="sm" variant="outline" className="h-9 gap-2" onClick={handleExport} disabled={!whisperHash}>
-                        <Download className="w-4 h-4" />
-                        Export JSON
                     </Button>
                 </div>
             </div>

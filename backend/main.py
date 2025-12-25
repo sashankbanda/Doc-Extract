@@ -44,3 +44,6 @@ app.include_router(keys.router)
 from backend.routes import export
 app.include_router(export.router)
 
+
+from backend.routes import dashboard
+app.include_router(dashboard.router, prefix="/dashboard", tags=["dashboard"])
