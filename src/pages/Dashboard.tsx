@@ -69,24 +69,8 @@ export default function Dashboard() {
     navigate("/upload");
   };
   
-  const handleView = (hash: string) => {
-      // Navigate to workspace with this hash
-      // The Workspace currently expects hash in URL ?
-      // No, currently Workspace handles hash internally via context or URL param?
-      // Let's check Workspace routing. Usually /workspace/:id ?
-      // App router says: <Route path="/workspace" element={<Workspace />} />
-      // And Workspace.tsx reads distinct query param? Or context? 
-      // I should check.
-      // Assuming context or just navigating to /workspace and letting it pick up active might fail if we don't set active.
-      // Ideally I should update active document context.
-      // FOR NOW, I will just navigate to /workspace?id={hash} if supported, or just /workspace.
-      // Wait, Workspace usually relies on 'Active Document'. 
-      // I might need to "resume" a session.
-      // But let's build the UI first.
-      
-      // Temporary: Just go to workspace. 
-      // Ideally we need a way to open a specific document.
-      navigate(`/workspace`);
+  const handleView = (hash: string, filename: string) => {
+      navigate(`/workspace?whisper_hash=${hash}&fileName=${encodeURIComponent(filename)}`);
   };
 
   if (loading) {
@@ -167,7 +151,7 @@ export default function Dashboard() {
                            Export JSON
                        </Button>
                    )}
-                   <Button variant="secondary" size="sm" onClick={() => handleView(file.hash)}>
+                   <Button variant="secondary" size="sm" onClick={() => handleView(file.hash, file.filename)}>
                        Open
                    </Button>
                 </TableCell>
