@@ -8,6 +8,7 @@ import litellm
 from backend.config import config
 from backend.services.semantic_tagger import semantic_tagger
 from backend.services.key_manager import key_manager
+from backend.services.juror_service import juror_service
 
 
 logger = logging.getLogger(__name__)
@@ -464,9 +465,103 @@ class LLMService:
         tagged_items = semantic_tagger.tag_items(items)
         
         # Return flat, lossless structure - no grouping, no claims, no sections
+        # Return flat, lossless structure - no grouping, no claims, no sections
+        # NEW: Run Juror Verification for High-Risk Fields (Description/Notes)
+        # We do this asynchronously/parallel if possible, or sequential for safety first.
+        # Since we are inside an async function, we can await checks.
+        
+        # Prepare context cache to avoid re-fetching raw text slice repeatedly? 
+        # Actually raw_text is in memory. We need to map line numbers to text.
+        
+        # Parse raw_text into lines for fast context lookup
+        raw_lines = raw_text.splitlines()
+        
+        verified_items = []
+        for item in tagged_items:
+            # Check if this item needs verification
+            semantic_type = item.get("semantic_type", "")
+            
+            # Target Descriptions and Notes (most prone to truncation)
+            if semantic_type in ["claim.description", "claim.notes", "claim.cause_of_loss"]:
+                # Get Context
+                line_nums = item.get("line_numbers", [])
+                context_text = self._get_context_for_items(line_nums, raw_lines)
+                
+                if context_text:
+                    # Run Juror
+                    # Note: For production speed, we should gather all these promises and await_all
+                    # For now, sequential is safer to implement/debug
+                    verification = await juror_service.verify_item_completeness(
+                        item.get("source_key", ""),
+                        item.get("value", ""),
+                        context_text,
+                        model_id=None # Use default fast juror
+                    )
+                    item["verification_status"] = verification
+                else:
+                    item["verification_status"] = {"status": "unverified", "reason": "No context found"}
+            else:
+                 # Default verified for other fields (dates, amounts usually okay or strict regex)
+                 item["verification_status"] = {"status": "verified", "reason": "Low-risk field"}
+            
+            verified_items.append(item)
+
         return {
-            "items": tagged_items
+            "items": verified_items
         }
+
+    def _get_context_for_items(self, line_numbers: List[int], raw_lines: List[str], buffer: int = 2) -> str:
+        """
+        Extract lines from raw_lines around the given line_numbers.
+        Handles the [NN] markers to map logical line numbers to array indices.
+        
+        Note: The raw_text usually contains lines starting with "0xNN: ".
+        We need to match the line_numbers (integers) to these prefixes.
+        """
+        if not line_numbers:
+            return ""
+            
+        # Sort lines
+        nums = sorted(line_numbers)
+        min_line = nums[0]
+        max_line = nums[-1]
+        
+        context_parts = []
+        
+        # Simple extraction: iterate input lines and look for markers
+        # Optimized: Scan raw lines once or use a map?
+        # Given typical file size < 500 lines, iteration is fine.
+        
+        # We want lines from (min_line - buffer) to (max_line + buffer)
+        target_indices = []
+        
+        # Create a mapping of logical_line_num -> (index, content)
+        # raw_lines format: "0x01: text..."
+        
+        line_map = {}
+        for idx, text in enumerate(raw_lines):
+            # Try to parse prefix
+            # Assuming format "0xNN: " or "[NN] "
+            prefix_end = text.find(":")
+            if prefix_end != -1:
+                prefix = text[:prefix_end].strip()
+                # Parse number
+                line_num = self._convert_line_number(prefix)
+                if line_num is not None:
+                    line_map[line_num] = (idx, text)
+        
+        # Now gather context
+        # We want the contiguous block from min-2 to max+2 if they exist in the map
+        start_context = max(0, min_line - buffer)
+        end_context = max_line + buffer
+        
+        gathered_lines = []
+        # We iterate through the logical range
+        for l_num in range(start_context, end_context + 1):
+            if l_num in line_map:
+                gathered_lines.append(line_map[l_num][1])
+                
+        return "\n".join(gathered_lines)
 
     def _convert_line_number(self, line_val: Any) -> Optional[int]:
         """

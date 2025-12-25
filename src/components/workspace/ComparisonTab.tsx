@@ -45,6 +45,8 @@ function ComparisonCell({
     value, 
     diffValue, // The other model's value for diffing
     isMatch, 
+    tier,
+    verificationReason,
     isApproved,
     onApprove, 
     onUpdate,
@@ -57,6 +59,8 @@ function ComparisonCell({
     value: string;
     diffValue?: string;
     isMatch: boolean;
+    tier?: "match" | "warning" | "mismatch";
+    verificationReason?: string;
     isApproved: boolean;
     onApprove: (key: string, val: string) => void;
     onUpdate: (model: 'A' | 'B', index: number, k: string, v: string) => void;
@@ -133,6 +137,8 @@ function ComparisonCell({
         );
     }
 
+    const isWarning = tier === "warning";
+
     return (
         <div className="group relative pr-16 min-h-[2rem] flex items-center group/cell">
              <div className="text-sm font-mono break-all whitespace-pre-wrap flex-1">
@@ -143,9 +149,17 @@ function ComparisonCell({
                         mode={model === 'A' ? 'old' : 'new'} 
                     />
                 ) : (
-                    <span className={cn("break-words", isApproved && "font-bold text-green-700")}>
+                    <span 
+                        className={cn(
+                            "break-words", 
+                            isApproved && "font-bold text-green-700",
+                            isWarning && !isApproved && "bg-yellow-100/50 text-yellow-900 px-1 rounded border border-yellow-200"
+                        )}
+                        title={isWarning ? verificationReason : undefined}
+                    >
                         {value === "null" || value === "undefined" ? <span className="text-muted-foreground italic">{value}</span> : value}
                         {isApproved && <CheckCircle2 className="w-3 h-3 inline-block ml-1 opacity-70" />}
+                        {isWarning && !isApproved && <span className="text-xs ml-2 cursor-help font-sans">⚠️</span>}
                     </span>
                 )}
             </div>
@@ -661,7 +675,8 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
                                            isNarrow ? "grid-cols-1 divide-y" : "grid-cols-2 divide-x",
                                            !isSelected && "hover:bg-muted/30 border-border",
                                            isSelected ? "bg-accent/50 border-primary ring-1 ring-primary/20" : "",
-                                           !row.isMatch && !isSelected && "border-destructive/20 bg-destructive/5"
+                                           !row.isMatch && !isSelected && "border-destructive/20 bg-destructive/5",
+                                           row.tier === "warning" && !isSelected && "border-yellow-200 bg-yellow-50/50" // Warning style
                                        )}
                                      >
                                         {/* Model A Cell */}
@@ -680,6 +695,8 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
                                                 value={row.valA}
                                                 diffValue={row.valB}
                                                 isMatch={row.isMatch}
+                                                tier={row.tier}
+                                                verificationReason={row.verificationReason}
                                                 isApproved={approvedItems[row.key] === row.valA}
                                                 onApprove={approveItem}
                                                 onUpdate={updateItem}
@@ -713,6 +730,8 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
                                                 value={row.valB}
                                                 diffValue={row.valA} // Pass A as diff for B
                                                 isMatch={row.isMatch}
+                                                tier={row.tier}
+                                                verificationReason={row.verificationReason}
                                                 isApproved={approvedItems[row.key] === row.valB}
                                                 onApprove={approveItem}
                                                 onUpdate={updateItem}

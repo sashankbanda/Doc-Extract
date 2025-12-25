@@ -113,6 +113,10 @@ export interface StructuredItem {
     value: string;
     line_numbers: number[];
     semantic_type: string; // e.g., "claim.number", "claim.claimant", "policy.number", "unknown"
+    verification_status?: {
+        status: "verified" | "suspicious" | "unverified";
+        reason?: string;
+    };
 }
 
 // Backend response: flat array of items

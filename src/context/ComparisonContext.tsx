@@ -15,6 +15,9 @@ export interface ComparisonRow {
     // Source Indices for editing
     indexA?: number;
     indexB?: number;
+    // Verification
+    tier: "match" | "warning" | "mismatch";
+    verificationReason?: string;
 }
 
 interface ComparisonContextType {
@@ -338,6 +341,32 @@ export function ComparisonProvider({ children }: { children: ReactNode }) {
                 const displayA = valA === undefined ? "(missing)" : String(valA);
                 const displayB = valB === undefined ? "(missing)" : String(valB);
 
+                // Verification Logic (Juror)
+                // Default to verified if status is missing (backward compat)
+                const statusA = itemA?.verification_status?.status || "verified";
+                const statusB = itemB?.verification_status?.status || "verified";
+                const reasonA = itemA?.verification_status?.reason;
+                const reasonB = itemB?.verification_status?.reason;
+
+                let tier: "match" | "warning" | "mismatch" = "mismatch";
+                let verificationReason = undefined;
+
+                if (isMatch) {
+                    if (statusA === "suspicious" || statusB === "suspicious") {
+                        tier = "warning";
+                        verificationReason = reasonA || reasonB || "Juror marked this match as suspicious (potential truncation)";
+                    } else if (statusA === "unverified" || statusB === "unverified") {
+                         // Fallback for failing open or old data. Usually treat as verified if simple text match?
+                         // Let's be strict: if explicit unverified, warn.
+                         tier = "warning"; 
+                         verificationReason = reasonA || reasonB || "Verification check failed";
+                    } else {
+                        tier = "match";
+                    }
+                } else {
+                    tier = "mismatch";
+                }
+
                 // Collect line numbers for highlighting
                 const linesA = itemA?.line_numbers || [];
                 const linesB = itemB?.line_numbers || [];
@@ -356,6 +385,8 @@ export function ComparisonProvider({ children }: { children: ReactNode }) {
                     valA: displayA,
                     valB: displayB,
                     isMatch,
+                    tier, // NEW
+                    verificationReason, // NEW
                     lineNumbers: allLines,
                     lineNumbersA: linesA,
                     lineNumbersB: linesB,
