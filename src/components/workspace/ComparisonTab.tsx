@@ -14,7 +14,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useComparisonContext } from "@/context/ComparisonContext";
 import { cn } from "@/lib/utils";
-import { ArrowRight, Check, CheckCircle2, ChevronDown, ChevronUp, Edit2, Loader2, Play, Trash2, X } from "lucide-react";
+import { Check, CheckCircle2, ChevronDown, ChevronUp, Edit2, Loader2, Play, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { DiffViewer } from "./DiffViewer";
 
@@ -482,18 +482,31 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
             )}
 
             
-            {/* Split View Results */}
-            <div className={cn(
-                "flex-1 overflow-hidden grid min-h-0",
-                isNarrow ? "grid-cols-1 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] divide-y" : "grid-cols-2 grid-rows-[minmax(0,1fr)] divide-x"
-            )}>
+            {/* Unified Results List */}
+            <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+                
+                {/* Unified Header */}
+                {(dataA || dataB || loadingA || loadingB) && (
+                     <div className={cn(
+                        "bg-muted/30 border-b px-4 py-2 text-xs font-medium text-muted-foreground grid gap-4 sticky top-0 z-10 backdrop-blur-sm",
+                        isNarrow ? "grid-cols-1" : "grid-cols-2"
+                     )}>
+                        <div className="flex items-center justify-between min-w-0">
+                             <span className="truncate max-w-[80%]">{nameA}</span>
+                             {loadingA && <Loader2 className="w-3 h-3 animate-spin text-primary" />}
+                        </div>
+                        {!isNarrow && (
+                            <div className="flex items-center justify-between min-w-0 pl-4 border-l">
+                                 <span className="truncate max-w-[80%]">{nameB}</span>
+                                 {loadingB && <Loader2 className="w-3 h-3 animate-spin text-primary" />}
+                            </div>
+                        )}
+                    </div>
+                )}
 
-                {/* Empty State / Single Run Button */}
+                {/* Empty State */}
                 {(!dataA && !dataB && !loadingA && !loadingB) && (
-                    <div className="col-span-2 flex flex-col items-center justify-center p-8 space-y-4 text-center">
-                         <div className="p-4 rounded-full bg-muted/50 mb-2 hidden">
-                            <ArrowRight className="w-8 h-8 text-muted-foreground/50" />
-                         </div>
+                    <div className="flex-1 flex flex-col items-center justify-center p-8 space-y-4 text-center">
                          <h3 className="text-lg font-semibold text-foreground">Ready to Compare</h3>
                          <p className="text-sm text-muted-foreground max-w-sm">
                              Extract data using two different models to compare their accuracy and performance.
@@ -508,180 +521,118 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
                          </div>
                     </div>
                 )}
-                
-                {/* Show content if we have data OR are loading */}
+
+                {/* Main Content ScrollArea */}
                 {((dataA || dataB) || (loadingA || loadingB)) && (
-                    <>
-                    {/* Panel A */}
-                    <div className="flex flex-col h-full min-w-0">
-                        {/* Column Header */}
-                        <div className="bg-muted/30 border-b px-4 py-2 text-xs font-medium text-muted-foreground flex items-center justify-between sticky top-0 z-10 backdrop-blur-sm">
-                             <span className="truncate max-w-[80%]">{nameA}</span>
-                             {loadingA && <Loader2 className="w-3 h-3 animate-spin text-primary" />}
-                        </div>
-                        <ScrollArea className="flex-1 bg-card/30">
-                            <div className="p-4 space-y-1">
-                                {loadingA ? (
-                                     <div className="space-y-3 py-2">
-                                         {Array.from({length: 6}).map((_, i) => (
-                                             <div key={i} className="space-y-2 p-3 border rounded-md">
+                    <ScrollArea className="flex-1 bg-card/30">
+                        <div className="p-4 space-y-4">
+                            {(loadingA || loadingB) && !dataA && !dataB ? (
+                                 <div className="space-y-4">
+                                     {Array.from({length: 6}).map((_, i) => (
+                                         <div key={i} className={cn(
+                                            "grid gap-4 border rounded-md p-3",
+                                            isNarrow ? "grid-cols-1" : "grid-cols-2"
+                                         )}>
+                                             <div className="space-y-2">
                                                  <Skeleton className="h-3 w-24" />
                                                  <Skeleton className="h-4 w-full" />
                                              </div>
-                                         ))}
-                                     </div>
-                                ) : (
-                                    <>
-                                        {filteredRows.map((row, i) => {
-                                           const isSelected = selectedRow === i && selectedPanel === 'A';
-                                           return (
-                                           <div 
-                                                key={row.key}
-                                                id={`row-a-${i}`}
-                                                onClick={() => {
-                                                    setSelectedRow(i);
-                                                    setSelectedPanel('A');
-                                                }}
-                                                className={cn(
-                                                   "p-3 rounded border text-sm grid gap-1 cursor-pointer transition-colors group",
-                                                   !isSelected && "hover:bg-muted/50",
-                                                   isSelected ? "bg-accent border-primary ring-1 ring-primary/20" : "border-border",
-                                                   !row.isMatch && !isSelected && "border-destructive/20 bg-destructive/5"
-                                               )}
-                                           >
-                                               <div className="flex justify-between items-center">
-                                                    <div className="flex items-center gap-2">
-                                                        <div className="font-semibold text-xs text-muted-foreground uppercase tracking-wider">{row.key}</div>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            className="h-4 w-4 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                if (window.confirm("Are you sure you want to delete this row? This action will remove it from the final result.")) {
-                                                                    deleteItem(row.key);
-                                                                }
-                                                            }}
-                                                        >
-                                                            <Trash2 className="w-3 h-3" />
-                                                        </Button>
-                                                    </div>
-                                                    {row.sortKey !== Number.MAX_SAFE_INTEGER && (
-                                                        <div className="text-[10px] text-muted-foreground opacity-50">L{row.sortKey}</div>
-                                                    )}
-                                               </div>
-                                               <ComparisonCell 
-                                                    model="A"
-                                                    index={row.indexA}
-                                                    uniqueKey={row.key}
-                                                    rawKey={row.key.replace(/ \[\d+\]$/, '')}
-                                                    value={row.valA}
-                                                    diffValue={row.valB}
-                                                    isMatch={row.isMatch}
-                                                    isApproved={approvedItems[row.key] === row.valA}
-                                                    onApprove={approveItem}
-                                                    onUpdate={updateItem}
-                                               />
-                                           </div> 
-                                           );
-                                        })}
-                                        {!loadingA && !dataA && filteredRows.length === 0 && (
-                                            <div className="text-center text-muted-foreground py-10 text-sm italic">
-                                                No data returned from Model A.
-                                            </div>
-                                        )}
-                                    </>
-                                )}
-                            </div>
-                        </ScrollArea>
-                    </div>
-                    
-                    {/* Panel B */}
-                     <div className="flex flex-col h-full min-w-0">
-                        {/* Column Header */}
-                        <div className="bg-muted/30 border-b px-4 py-2 text-xs font-medium text-muted-foreground flex items-center justify-between sticky top-0 z-10 backdrop-blur-sm">
-                             <span className="truncate max-w-[80%]">{nameB}</span>
-                             {loadingB && <Loader2 className="w-3 h-3 animate-spin text-primary" />}
-                        </div>
-                         <ScrollArea className="flex-1 bg-card/30">
-                            <div className="p-4 space-y-1">
-                                {loadingB ? (
-                                     <div className="space-y-3 py-2">
-                                         {Array.from({length: 6}).map((_, i) => (
-                                             <div key={i} className="space-y-2 p-3 border rounded-md">
+                                             <div className="space-y-2">
                                                  <Skeleton className="h-3 w-24" />
                                                  <Skeleton className="h-4 w-full" />
                                              </div>
-                                         ))}
-                                     </div>
-                                ) : (
-                                    <>
-                                        {filteredRows.map((row, i) => {
-                                           const isSelected = selectedRow === i && selectedPanel === 'B';
-                                           return (
-                                           <div 
-                                                key={row.key}
-                                                id={`row-b-${i}`}
-                                                onClick={() => {
-                                                    setSelectedRow(i);
-                                                    setSelectedPanel('B');
-                                                }}
-                                                className={cn(
-                                                   "p-3 rounded border text-sm grid gap-1 cursor-pointer transition-colors group",
-                                                   !isSelected && "hover:bg-muted/50",
-                                                   isSelected ? "bg-accent border-primary ring-1 ring-primary/20" : "border-border",
-                                                   !row.isMatch && !isSelected && "border-destructive/20 bg-destructive/5"
-                                               )}
-                                           >
-                                                <div className="flex justify-between items-center">
-                                                    <div className="flex items-center gap-2">
-                                                        <div className="font-semibold text-xs text-muted-foreground uppercase tracking-wider">{row.key}</div>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            className="h-4 w-4 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                if (window.confirm("Are you sure you want to delete this row? This action will remove it from the final result.")) {
-                                                                    deleteItem(row.key);
-                                                                }
-                                                            }}
-                                                        >
-                                                            <Trash2 className="w-3 h-3" />
-                                                        </Button>
-                                                    </div>
-                                                    {row.sortKey !== Number.MAX_SAFE_INTEGER && (
-                                                        <div className="text-[10px] text-muted-foreground opacity-50">L{row.sortKey}</div>
-                                                    )}
-                                               </div>
-                                               <ComparisonCell 
-                                                    model="B"
-                                                    index={row.indexB}
-                                                    uniqueKey={row.key}
-                                                    rawKey={row.key.replace(/ \[\d+\]$/, '')}
-                                                    value={row.valB}
-                                                    diffValue={row.valA}
-                                                    isMatch={row.isMatch}
-                                                    isApproved={approvedItems[row.key] === row.valB}
-                                                    onApprove={approveItem}
-                                                    onUpdate={updateItem}
-                                               />
-                                           </div> 
-                                           );
-                                        })}
-                                        {!loadingB && !dataB && filteredRows.length === 0 && (
-                                            <div className="text-center text-muted-foreground py-10 text-sm italic">
-                                                No data returned from Model B.
+                                         </div>
+                                     ))}
+                                 </div>
+                            ) : (
+                                filteredRows.map((row, i) => {
+                                   const isSelected = selectedRow === i;
+                                   
+                                   return (
+                                     <div 
+                                        key={row.key}
+                                        id={`row-unified-${i}`} // Unified ID
+                                        onClick={() => {
+                                            setSelectedRow(i);
+                                            // Panel selection logic could be refined based on click target, 
+                                            // but generally row selection is primary now.
+                                        }}
+                                        className={cn(
+                                           "rounded border grid transition-colors group/row",
+                                           isNarrow ? "grid-cols-1 divide-y" : "grid-cols-2 divide-x",
+                                           !isSelected && "hover:bg-muted/30 border-border",
+                                           isSelected ? "bg-accent/50 border-primary ring-1 ring-primary/20" : "",
+                                           !row.isMatch && !isSelected && "border-destructive/20 bg-destructive/5"
+                                       )}
+                                     >
+                                        {/* Model A Cell */}
+                                        <div className="p-3 min-w-0">
+                                            <div className="flex justify-between items-center mb-1">
+                                                <div className="font-semibold text-xs text-muted-foreground uppercase tracking-wider truncate">{row.key}</div>
+                                                {row.sortKey !== Number.MAX_SAFE_INTEGER && (
+                                                    <div className="text-[10px] text-muted-foreground opacity-50">L{row.sortKey}</div>
+                                                )}
                                             </div>
-                                        )}
-                                    </>
-                                )}
-                            </div>
-                        </ScrollArea>
-                    </div>
-                    </>
+                                            <ComparisonCell 
+                                                model="A"
+                                                index={row.indexA}
+                                                uniqueKey={row.key}
+                                                rawKey={row.key.replace(/ \[\d+\]$/, '')}
+                                                value={row.valA}
+                                                diffValue={row.valB}
+                                                isMatch={row.isMatch}
+                                                isApproved={approvedItems[row.key] === row.valA}
+                                                onApprove={approveItem}
+                                                onUpdate={updateItem}
+                                            />
+                                        </div>
+
+                                        {/* Model B Cell */}
+                                        <div className="p-3 min-w-0">
+                                             <div className="flex justify-between items-center mb-1">
+                                                <div className="font-semibold text-xs text-muted-foreground uppercase tracking-wider truncate opacity-50">{row.key}</div> {/* Dimmed key for B since redundant */}
+                                                 <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-4 w-4 text-muted-foreground hover:text-destructive opacity-0 group-hover/row:opacity-100 transition-opacity ml-auto"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        if (window.confirm("Are you sure you want to delete this row? This action will remove it from the final result.")) {
+                                                            deleteItem(row.key);
+                                                        }
+                                                    }}
+                                                >
+                                                    <Trash2 className="w-3 h-3" />
+                                                </Button>
+                                            </div>
+                                            <ComparisonCell 
+                                                model="B"
+                                                index={row.indexB}
+                                                uniqueKey={row.key}
+                                                rawKey={row.key.replace(/ \[\d+\]$/, '')}
+                                                value={row.valB}
+                                                diffValue={row.valA} // Pass A as diff for B
+                                                isMatch={row.isMatch}
+                                                isApproved={approvedItems[row.key] === row.valB}
+                                                onApprove={approveItem}
+                                                onUpdate={updateItem}
+                                            />
+                                        </div>
+                                     </div>
+                                   );
+                                })
+                            )}
+                            
+                            {!loadingA && !loadingB && filteredRows.length === 0 && (dataA || dataB) && (
+                                <div className="text-center text-muted-foreground py-10 text-sm italic col-span-2">
+                                    No common data found to compare.
+                                </div>
+                            )}
+                        </div>
+                    </ScrollArea>
                 )}
             </div>
+
             
             <AlertDialog open={alertConfig.open} onOpenChange={closeAlert}>
                 <AlertDialogContent>
