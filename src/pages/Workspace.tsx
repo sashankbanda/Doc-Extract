@@ -71,6 +71,10 @@ export default function Workspace() {
     // Also clear highlights
     setActiveBoundingBox(null);
     setSecondaryHighlights([]);
+    
+    // Reset data to prevent stale content while loading
+    setResultText("");
+    setLineMetadata([]);
   }, [whisperHash]);
 
   
@@ -215,10 +219,10 @@ export default function Workspace() {
         const pdfPage = rect.page + 1;
         
         setActiveBoundingBox({
-          x: rect.x1,
-          y: rect.y1,
-          width: rect.x2 - rect.x1,
-          height: rect.y2 - rect.y1,
+          x: rect.x1 / dims.width,
+          y: rect.y1 / dims.height,
+          width: (rect.x2 - rect.x1) / dims.width,
+          height: (rect.y2 - rect.y1) / dims.height,
           page: pdfPage
         });
         
