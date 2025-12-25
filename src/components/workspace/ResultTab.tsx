@@ -1,7 +1,24 @@
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table";
 import { useComparisonContext } from "@/context/ComparisonContext";
 import { cn } from "@/lib/utils";
 import { CheckCircle2, Loader2, Play, Trash2 } from "lucide-react";
@@ -16,6 +33,23 @@ export function ResultTab({ onHighlight, onRequestCompare }: ResultTabProps) {
     const { comparisonRows, dataA, dataB, approvedItems, whisperHash, deleteItem, runComparison, loadingA, loadingB, setFocusKey } = useComparisonContext(); // Assume whisperHash is exposed
     const [filter, setFilter] = useState<'all' | 'approved' | 'null'>('all');
     const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+
+    // Alert Dialog State
+    const [alertConfig, setAlertConfig] = useState<{
+        open: boolean;
+        title: string;
+        description: string;
+        actionLabel?: string;
+        onAction?: () => void;
+        variant?: "default" | "destructive";
+        showCancel?: boolean;
+    }>({
+        open: false,
+        title: "",
+        description: "",
+    });
+    
+    const closeAlert = () => setAlertConfig(prev => ({ ...prev, open: false }));
 
     const filteredRows = comparisonRows.filter(row => {
         if (filter === 'all') return true;
@@ -108,6 +142,7 @@ export function ResultTab({ onHighlight, onRequestCompare }: ResultTabProps) {
         }
     }, [approvedItems, whisperHash]);
 
+
     const handleExport = async () => {
         if (!whisperHash) return;
 
@@ -118,7 +153,7 @@ export function ResultTab({ onHighlight, onRequestCompare }: ResultTabProps) {
             
             return {
                 key: row.key,
-                source_key: row.key.replace(/ \[\d+\]$/, ''), // simplified
+                source_key: row.key.replace(/ \[\d+\]$/, ''),
                 value: finalValue,
                 line_numbers: row.lineNumbers,
                 is_approved: isApproved,
@@ -135,10 +170,23 @@ export function ResultTab({ onHighlight, onRequestCompare }: ResultTabProps) {
                     items: itemsToExport
                 })
             });
-            alert("Export saved successfully!");
+            setAlertConfig({
+                open: true,
+                title: "Export Successful",
+                description: "Export saved successfully!",
+                showCancel: false,
+                actionLabel: "OK"
+            });
         } catch (e) {
             console.error(e);
-            alert("Export failed");
+            setAlertConfig({
+                open: true,
+                title: "Export Failed",
+                description: "Failed to save export. Please try again.",
+                showCancel: false,
+                actionLabel: "OK",
+                variant: "destructive"
+            });
         }
     };
 
@@ -232,7 +280,14 @@ export function ResultTab({ onHighlight, onRequestCompare }: ResultTabProps) {
                             }, 0);
 
                             if (unresolvedCount > 0) {
-                                alert(`Cannot finish review. There are ${unresolvedCount} unresolved items (marked in red). Please approve or edit them.`);
+                                setAlertConfig({
+                                    open: true,
+                                    title: "Cannot Finish Review",
+                                    description: `There are ${unresolvedCount} unresolved items (marked in red). Please approve or edit them.`,
+                                    showCancel: false,
+                                    actionLabel: "OK",
+                                    variant: "destructive"
+                                });
                                 
                                 // Auto-update status to In Progress since user tried to finish but couldn't
                                 try {
@@ -291,7 +346,14 @@ export function ResultTab({ onHighlight, onRequestCompare }: ResultTabProps) {
                                 window.location.href = "/dashboard";
                             } catch (e) {
                                 console.error("Failed to finish review", e);
-                                alert("Failed to finish review. Please try again.");
+                                setAlertConfig({
+                                    open: true,
+                                    title: "Error",
+                                    description: "Failed to finish review. Please try again.",
+                                    showCancel: false,
+                                    actionLabel: "OK",
+                                    variant: "destructive"
+                                });
                             }
                         }}
                     >
@@ -388,9 +450,15 @@ export function ResultTab({ onHighlight, onRequestCompare }: ResultTabProps) {
                                                     className="h-6 w-6 text-muted-foreground hover:text-destructive"
                                                     onClick={(e) => {
                                                         e.stopPropagation();
-                                                        if (window.confirm("Are you sure you want to delete this row? This action will remove it from the final result.")) {
-                                                            deleteItem(row.key);
-                                                        }
+                                                        setAlertConfig({
+                                                            open: true,
+                                                            title: "Delete Row",
+                                                            description: "Are you sure you want to delete this row? This action will remove it from the final result.",
+                                                            showCancel: true,
+                                                            actionLabel: "Delete",
+                                                            variant: "destructive",
+                                                            onAction: () => deleteItem(row.key)
+                                                        });
                                                     }}
                                                 >
                                                     <Trash2 className="w-3.5 h-3.5" />
@@ -404,6 +472,33 @@ export function ResultTab({ onHighlight, onRequestCompare }: ResultTabProps) {
                     </div>
                 </div>
             </ScrollArea>
+            
+            <AlertDialog open={alertConfig.open} onOpenChange={closeAlert}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>{alertConfig.title}</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            {alertConfig.description}
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        {alertConfig.showCancel && (
+                            <AlertDialogCancel onClick={closeAlert}>Cancel</AlertDialogCancel>
+                        )}
+                        <AlertDialogAction 
+                            onClick={(e) => {
+                                if (alertConfig.onAction) {
+                                    alertConfig.onAction();
+                                }
+                                closeAlert();
+                            }}
+                            className={cn(alertConfig.variant === "destructive" && "bg-destructive text-destructive-foreground hover:bg-destructive/90")}
+                        >
+                            {alertConfig.actionLabel || "Continue"}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }

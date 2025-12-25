@@ -1,3 +1,13 @@
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -168,6 +178,23 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
 
     const containerRef = useRef<HTMLDivElement>(null);
     const [isNarrow, setIsNarrow] = useState(false);
+
+    // Alert Dialog State
+    const [alertConfig, setAlertConfig] = useState<{
+        open: boolean;
+        title: string;
+        description: string;
+        actionLabel?: string;
+        onAction?: () => void;
+        variant?: "default" | "destructive";
+        showCancel?: boolean;
+    }>({
+        open: false,
+        title: "",
+        description: "",
+    });
+    
+    const closeAlert = () => setAlertConfig(prev => ({ ...prev, open: false }));
 
     useEffect(() => {
         if (!containerRef.current) return;
@@ -342,6 +369,7 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
                 "flex-1 overflow-hidden grid min-h-0",
                 isNarrow ? "grid-cols-1 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] divide-y" : "grid-cols-2 grid-rows-[minmax(0,1fr)] divide-x"
             )}>
+
                 {/* Empty State / Single Run Button */}
                 {(!dataA && !dataB && !loadingA && !loadingB) && (
                     <div className="col-span-2 flex flex-col items-center justify-center p-8 space-y-4 text-center">
@@ -390,7 +418,7 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
                                            const isSelected = selectedRow === i && selectedPanel === 'A';
                                            return (
                                            <div 
-                                                key={`a-${i}`}
+                                                key={row.key}
                                                 id={`row-a-${i}`}
                                                 onClick={() => {
                                                     setSelectedRow(i);
@@ -473,7 +501,7 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
                                            const isSelected = selectedRow === i && selectedPanel === 'B';
                                            return (
                                            <div 
-                                                key={`b-${i}`} 
+                                                key={row.key}
                                                 id={`row-b-${i}`}
                                                 onClick={() => {
                                                     setSelectedRow(i);
@@ -534,6 +562,33 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
                     </>
                 )}
             </div>
+            
+            <AlertDialog open={alertConfig.open} onOpenChange={closeAlert}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>{alertConfig.title}</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            {alertConfig.description}
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        {alertConfig.showCancel && (
+                            <AlertDialogCancel onClick={closeAlert}>Cancel</AlertDialogCancel>
+                        )}
+                        <AlertDialogAction 
+                            onClick={(e) => {
+                                if (alertConfig.onAction) {
+                                    alertConfig.onAction();
+                                }
+                                closeAlert();
+                            }}
+                            className={cn(alertConfig.variant === "destructive" && "bg-destructive text-destructive-foreground hover:bg-destructive/90")}
+                        >
+                            {alertConfig.actionLabel || "Continue"}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }
