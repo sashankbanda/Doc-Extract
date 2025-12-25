@@ -302,13 +302,7 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
                 if (e.target === e.currentTarget) e.currentTarget.focus();
             }}
         >
-             <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 p-4 space-y-4">
-                {/* Header Actions */}
-                <div className="flex items-center justify-between">
-                     <h2 className="text-lg font-semibold tracking-tight hidden">Compare Models</h2>
-                     {/* We can put header actions here if needed */}
-                </div>
-
+             <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 p-2">
                 {/* Filters */}
                 <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2 bg-muted/50 p-1 rounded-md border text-xs">
