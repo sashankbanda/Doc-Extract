@@ -1,5 +1,5 @@
 import { StructuredItem, structureDocument } from '@/lib/api';
-import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useDocumentContext } from './DocumentContext';
 
@@ -41,6 +41,11 @@ interface ComparisonContextType {
     resultFilter: "all" | "approved" | "review";
     setResultFilter: (filter: "all" | "approved" | "review") => void;
     resetComparisonState: () => void;
+    // Timings
+    startTimeA: number | null;
+    startTimeB: number | null;
+    durationA: number | null;
+    durationB: number | null;
     comparisonRows: ComparisonRow[];
     // Approval State
     approvedItems: Record<string, string>; // SourceKey -> ApprovedValue
@@ -102,47 +107,24 @@ export function ComparisonProvider({ children }: { children: ReactNode }) {
     const [searchQuery, setSearchQuery] = useState("");
     const [approvedItems, setApprovedItems] = useState<Record<string, string>>({});
     const [deletedKeys, setDeletedKeys] = useState<Set<string>>(new Set());
+    
+    // Timer state
+    const [startTimeA, setStartTimeA] = useState<number | null>(null);
+    const [startTimeB, setStartTimeB] = useState<number | null>(null);
+    const [durationA, setDurationA] = useState<number | null>(null);
+    const [durationB, setDurationB] = useState<number | null>(null);
 
-    // Effect: Reload state when whisperHash changes
-    useEffect(() => {
-        if (!whisperHash) {
-            // Optional: Reset state if no document? Or keep last viewed?
-            // Resetting is safer to avoid showing wrong data for "null" document
-            setDataA(null);
-            setDataB(null);
-            setResultFilter("all");
-            setSearchQuery("");
-            setApprovedItems({});
-            return;
-        }
-
-        const load = <T,>(key: string, defaultVal: T): T => {
-            try {
-                const stored = localStorage.getItem(`comparison_${whisperHash}_${key}`);
-                return stored ? JSON.parse(stored) : defaultVal;
-            } catch { return defaultVal; }
-        };
-
-        setModelA(load("modelA", "groq/llama-3.3-70b-versatile"));
-        setModelB(load("modelB", "gemini/gemini-2.5-flash"));
-        setCustomModelA(load("customModelA", ""));
-        setCustomModelB(load("customModelB", ""));
-        setIsCustomA(load("isCustomA", false));
-        setIsCustomB(load("isCustomB", false));
-        setDataA(load("dataA", null));
-        setDataB(load("dataB", null));
-        setFilter(load("filter", "all"));
-        setResultFilter(load("resultFilter", "all"));
-        setApprovedItems(load("approvedItems", {}));
-        setDeletedKeys(new Set(load("deletedKeys", [])));
-        
-        // Don't modify loading state here - assume false on initial load 
-        // (unless we want to resume? but requests are not persistent across reload)
-    }, [whisperHash]);
+    // Track which hash we have currently loaded state for
+    const loadedHash = useRef<string | null>(null);
 
     // Save state on change
+    // MOVED BEFORE LOAD EFFECT TO PREVENT RACE CONDITION IN STRICT MODE
+    // If Save runs after Load in the same render cycle (before state update), 
+    // it sees new Hash (from Load's ref update) but stale Data (from closure), overwriting the clean state.
     useEffect(() => {
-        if (!whisperHash) return;
+        // Only save if we have a valid hash AND we have finished loading the initial state for it
+        if (!whisperHash || loadedHash.current !== whisperHash) return;
+        
         const save = (key: string, val: any) => {
             localStorage.setItem(`comparison_${whisperHash}_${key}`, JSON.stringify(val));
         };
@@ -158,7 +140,62 @@ export function ComparisonProvider({ children }: { children: ReactNode }) {
         save("resultFilter", resultFilter);
         save("approvedItems", approvedItems);
         save("deletedKeys", Array.from(deletedKeys));
-    }, [whisperHash, modelA, modelB, customModelA, customModelB, isCustomA, isCustomB, dataA, dataB, filter, resultFilter, approvedItems, deletedKeys]);
+        save("startTimeA", startTimeA);
+        save("startTimeB", startTimeB);
+        save("durationA", durationA);
+        save("durationB", durationB);
+    }, [whisperHash, modelA, modelB, customModelA, customModelB, isCustomA, isCustomB, dataA, dataB, filter, resultFilter, approvedItems, deletedKeys, startTimeA, startTimeB, durationA, durationB]);
+
+
+    // Effect: Reload state when whisperHash changes (handles both switch and upload if hash changes)
+    useEffect(() => {
+        // Always reset partially first to avoid stale data flicker
+        setDataA(null);
+        setDataB(null);
+        setApprovedItems({});
+        setDeletedKeys(new Set());
+        setFilter("all");
+        setResultFilter("all");
+        setSearchQuery("");
+        setLoadingA(false);
+        setLoadingB(false);
+        
+        if (!whisperHash) {
+            loadedHash.current = null;
+            return;
+        }
+
+        const load = <T,>(key: string, defaultVal: T): T => {
+            try {
+                const stored = localStorage.getItem(`comparison_${whisperHash}_${key}`);
+                return stored ? JSON.parse(stored) : defaultVal;
+            } catch { return defaultVal; }
+        };
+
+        const loadedModelA = load("modelA", "groq/llama-3.3-70b-versatile");
+        const loadedDataA = load("dataA", null);
+        
+        setModelA(loadedModelA);
+        setModelB(load("modelB", "gemini/gemini-2.5-flash"));
+        setCustomModelA(load("customModelA", ""));
+        setCustomModelB(load("customModelB", ""));
+        setIsCustomA(load("isCustomA", false));
+        setIsCustomB(load("isCustomB", false));
+        setDataA(loadedDataA);
+        setDataB(load("dataB", null));
+        setFilter(load("filter", "all"));
+        setResultFilter(load("resultFilter", "all"));
+        setApprovedItems(load("approvedItems", {}));
+        setDeletedKeys(new Set(load("deletedKeys", [])));
+        setStartTimeA(load("startTimeA", null));
+        setStartTimeB(load("startTimeB", null));
+        setDurationA(load("durationA", null));
+        setDurationB(load("durationB", null));
+        
+        // Mark this hash as loaded so we can safely save updates to it
+        loadedHash.current = whisperHash;
+        
+    }, [whisperHash]);
 
 
     const resetComparisonState = () => {
@@ -170,6 +207,10 @@ export function ComparisonProvider({ children }: { children: ReactNode }) {
         setResultFilter("all");
         setApprovedItems({});
         setDeletedKeys(new Set());
+        setStartTimeA(null);
+        setStartTimeB(null);
+        setDurationA(null);
+        setDurationB(null);
         if (whisperHash) {
              localStorage.removeItem(`comparison_${whisperHash}_dataA`);
              localStorage.removeItem(`comparison_${whisperHash}_dataB`);
@@ -197,6 +238,12 @@ export function ComparisonProvider({ children }: { children: ReactNode }) {
 
         setLoadingA(true);
         setLoadingB(true);
+        // Reset timers
+        const now = Date.now();
+        setStartTimeA(now);
+        setStartTimeB(now);
+        setDurationA(null);
+        setDurationB(null);
         
         // Launch A
         const promiseA = structureDocument(whisperHash, effectiveModelA, true)
@@ -208,7 +255,12 @@ export function ComparisonProvider({ children }: { children: ReactNode }) {
                 console.error("Model A failed", err);
                 toast.error(`Model A failed: ${err.message}`);
             })
-            .finally(() => setLoadingA(false));
+
+            .finally(() => {
+                setLoadingA(false);
+                setDurationA(Date.now() - now);
+                setStartTimeA(null);
+            });
 
         // Launch B
         const promiseB = structureDocument(whisperHash, effectiveModelB, true)
@@ -220,7 +272,12 @@ export function ComparisonProvider({ children }: { children: ReactNode }) {
                 console.error("Model B failed", err);
                 toast.error(`Model B failed: ${err.message}`);
             })
-            .finally(() => setLoadingB(false));
+
+            .finally(() => {
+                setLoadingB(false);
+                setDurationB(Date.now() - now);
+                setStartTimeB(null);
+            });
             
         await Promise.all([promiseA, promiseB]);
     };
@@ -394,8 +451,13 @@ export function ComparisonProvider({ children }: { children: ReactNode }) {
         whisperHash,
         deleteItem,
         focusKey,
-        setFocusKey
+        setFocusKey,
+        startTimeA,
+        startTimeB,
+        durationA,
+        durationB
     };
+
 
     return (
         <ComparisonContext.Provider value={value}>

@@ -180,34 +180,35 @@ function ComparisonCell({
     );
 }
 
-const LoadingTimer = ({ isLoading }: { isLoading: boolean }) => {
+const LoadingTimer = ({ isLoading, startTime, duration }: { isLoading: boolean, startTime: number | null, duration: number | null }) => {
     const [elapsed, setElapsed] = useState(0);
     const intervalRef = useRef<NodeJS.Timeout | null>(null);
-    const startTimeRef = useRef<number | null>(null);
 
     useEffect(() => {
-        if (isLoading) {
-            startTimeRef.current = Date.now();
-            setElapsed(0);
+        if (isLoading && startTime) {
+            setElapsed(Date.now() - startTime);
             intervalRef.current = setInterval(() => {
-                if (startTimeRef.current) {
-                    setElapsed(Date.now() - startTimeRef.current);
-                }
-            }, 50); // Update every 50ms
+                setElapsed(Date.now() - startTime);
+            }, 50);
+        } else if (duration !== null) {
+            setElapsed(duration);
+            if (intervalRef.current) {
+                clearInterval(intervalRef.current);
+                intervalRef.current = null;
+            }
         } else {
+            setElapsed(0);
             if (intervalRef.current) {
                 clearInterval(intervalRef.current);
                 intervalRef.current = null;
             }
         }
         return () => {
-            if (intervalRef.current) {
-                clearInterval(intervalRef.current);
-            }
+            if (intervalRef.current) clearInterval(intervalRef.current);
         };
-    }, [isLoading]);
+    }, [isLoading, startTime, duration]);
 
-    if (!isLoading && elapsed === 0) return null;
+    if (!isLoading && elapsed === 0 && duration === null) return null;
 
     return (
         <span className="text-[10px] font-mono tabular-nums text-muted-foreground ml-2">
@@ -237,8 +238,23 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
 
         deleteItem,
         focusKey, setFocusKey,
-        searchQuery
+        searchQuery,
+        startTimeA,
+        startTimeB,
+        durationA,
+        durationB,
+        whisperHash: contextHash
     } = useComparisonContext();
+
+    // Safety check: specific hash request vs context hash
+    const isContextStale = whisperHash && contextHash !== whisperHash;
+
+    // Use derived state for rendering to prevent flicker of old data
+    const safeDataA = isContextStale ? null : dataA;
+    const safeDataB = isContextStale ? null : dataB;
+    const safeLoadingA = isContextStale ? true : loadingA;
+    const safeLoadingB = isContextStale ? true : loadingB;
+
     
     // Local run extraction removed, using context runComparison
 
@@ -343,11 +359,12 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
     // The user's request focuses on explicitly running extraction. So let's leave auto-fetch out for now unless it was critical.
     
     const filteredRows = useMemo(() => {
+        if (isContextStale) return [];
         if (filter === "all") return comparisonRows;
         if (filter === "mismatch") return comparisonRows.filter(r => !r.isMatch);
         if (filter === "match") return comparisonRows.filter(r => r.isMatch);
         return comparisonRows;
-    }, [comparisonRows, filter]);
+    }, [comparisonRows, filter, isContextStale]);
 
     const [selectedRow, setSelectedRow] = useState<number | null>(null);
     const [selectedPanel, setSelectedPanel] = useState<'A' | 'B'>('A');
@@ -532,7 +549,7 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
             <div className="flex-1 overflow-hidden flex flex-col min-h-0">
                 
                 {/* Unified Header */}
-                {(dataA || dataB || loadingA || loadingB) && (
+                {(safeDataA || safeDataB || safeLoadingA || safeLoadingB) && (
                      <div className={cn(
                         "bg-muted/30 border-b px-4 py-2 text-xs font-medium text-muted-foreground grid gap-4 sticky top-0 z-10 backdrop-blur-sm",
                         isNarrow ? "grid-cols-1" : "grid-cols-2"
@@ -540,24 +557,24 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
                         <div className="flex items-center justify-between min-w-0">
                              <div className="flex items-center min-w-0 flex-1 mr-2">
                                 <span className="truncate max-w-[80%]">{nameA}</span>
-                                <LoadingTimer isLoading={loadingA} />
+                                <LoadingTimer isLoading={safeLoadingA} startTime={startTimeA} duration={durationA} />
                              </div>
-                             {loadingA && <Loader2 className="w-3 h-3 animate-spin text-primary flex-shrink-0" />}
+                             {safeLoadingA && <Loader2 className="w-3 h-3 animate-spin text-primary flex-shrink-0" />}
                         </div>
                         {!isNarrow && (
                             <div className="flex items-center justify-between min-w-0 pl-4 border-l">
                                  <div className="flex items-center min-w-0 flex-1 mr-2">
                                     <span className="truncate max-w-[80%]">{nameB}</span>
-                                    <LoadingTimer isLoading={loadingB} />
+                                    <LoadingTimer isLoading={safeLoadingB} startTime={startTimeB} duration={durationB} />
                                  </div>
-                                 {loadingB && <Loader2 className="w-3 h-3 animate-spin text-primary flex-shrink-0" />}
+                                 {safeLoadingB && <Loader2 className="w-3 h-3 animate-spin text-primary flex-shrink-0" />}
                             </div>
                         )}
                     </div>
                 )}
 
                 {/* Empty State */}
-                {(!dataA && !dataB && !loadingA && !loadingB) && (
+                {(!safeDataA && !safeDataB && !safeLoadingA && !safeLoadingB) && (
                     <div className="flex-1 flex flex-col items-center justify-center p-8 space-y-4 text-center">
                          <h3 className="text-lg font-semibold text-foreground">Ready to Compare</h3>
                          <p className="text-sm text-muted-foreground max-w-sm">
@@ -575,10 +592,10 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
                 )}
 
                 {/* Main Content ScrollArea */}
-                {((dataA || dataB) || (loadingA || loadingB)) && (
+                {((safeDataA || safeDataB) || (safeLoadingA || safeLoadingB)) && (
                     <ScrollArea className="flex-1 bg-card/30">
                         <div className="p-4 space-y-4">
-                            {(loadingA || loadingB) && !dataA && !dataB ? (
+                            {(safeLoadingA || safeLoadingB) && !safeDataA && !safeDataB ? (
                                  <div className="space-y-4">
                                      {Array.from({length: 6}).map((_, i) => (
                                          <div key={i} className={cn(
@@ -636,7 +653,7 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
                                                 isApproved={approvedItems[row.key] === row.valA}
                                                 onApprove={approveItem}
                                                 onUpdate={updateItem}
-                                                loading={loadingA}
+                                                loading={safeLoadingA}
                                             />
                                         </div>
 
@@ -669,7 +686,7 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
                                                 isApproved={approvedItems[row.key] === row.valB}
                                                 onApprove={approveItem}
                                                 onUpdate={updateItem}
-                                                loading={loadingB}
+                                                loading={safeLoadingB}
                                             />
                                         </div>
                                      </div>
@@ -677,7 +694,7 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
                                 })
                             )}
                             
-                            {!loadingA && !loadingB && filteredRows.length === 0 && (dataA || dataB) && (
+                            {!safeLoadingA && !safeLoadingB && filteredRows.length === 0 && (safeDataA || safeDataB) && (
                                 <div className="text-center text-muted-foreground py-10 text-sm italic col-span-2">
                                     No common data found to compare.
                                 </div>

@@ -25,11 +25,12 @@ import { CheckCircle2, ChevronDown, ChevronUp, Loader2, Play, Trash2, X } from "
 import { useEffect, useMemo, useRef, useState } from "react";
 
 interface ResultTabProps {
+    whisperHash?: string | null;
     onHighlight?: (lines: number[]) => void;
     onRequestCompare?: () => void;
 }
 
-export function ResultTab({ onHighlight, onRequestCompare }: ResultTabProps) {
+export function ResultTab({ whisperHash: targetHash, onHighlight, onRequestCompare }: ResultTabProps) {
     const { 
         comparisonRows, 
         dataA, 
@@ -47,21 +48,29 @@ export function ResultTab({ onHighlight, onRequestCompare }: ResultTabProps) {
         setSearchQuery
     } = useComparisonContext(); 
     
-    // const [filter, setFilter] = useState<'all' | 'approved' | 'null'>('all'); // Moved to context
+    // Safety check: specific hash request vs context hash
+    // If we are looking at Doc B (targetHash), but Context is still on Doc A (contextHash/whisperHash),
+    // we should wait (show loading) instead of showing Doc A's data.
+    const isContextStale = targetHash && whisperHash !== targetHash;
+
     const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
     // Search State
     const [searchMatches, setSearchMatches] = useState<number[]>([]);
     const [currentMatchIndex, setCurrentMatchIndex] = useState<number>(-1);
 
-    const filteredRows = useMemo(() => comparisonRows.filter(row => {
-        if (resultFilter === 'all') return true;
-        const approvedVal = approvedItems[row.key];
-        if (resultFilter === 'approved') return approvedVal !== undefined;
-        // 'review' (formerly 'null') means mismatch and not approved
-        if (resultFilter === 'review') return approvedVal === undefined && !row.isMatch;
-        return true;
-    }), [comparisonRows, resultFilter, approvedItems]);
+    const filteredRows = useMemo(() => {
+        if (isContextStale) return [];
+        return comparisonRows.filter(row => {
+            if (resultFilter === 'all') return true;
+            const approvedVal = approvedItems[row.key];
+            if (resultFilter === 'approved') return approvedVal !== undefined;
+            // 'review' (formerly 'null') means mismatch and not approved
+            if (resultFilter === 'review') return approvedVal === undefined && !row.isMatch;
+            return true;
+        });
+    }, [comparisonRows, resultFilter, approvedItems, isContextStale]);
+
 
     // Calculate matches when query or rows change
     useEffect(() => {
@@ -269,13 +278,13 @@ export function ResultTab({ onHighlight, onRequestCompare }: ResultTabProps) {
         }
     };
 
-    if (loadingA || loadingB) {
+    if (loadingA || loadingB || isContextStale) {
         return (
             <div className="flex flex-col h-full bg-background/50">
                 <div className="border-b bg-background/95 backdrop-blur px-4 py-3 sticky top-0 z-10">
                     <div className="flex items-center gap-2 font-medium">
                         <Loader2 className="w-5 h-5 animate-spin text-primary" />
-                        <h2 className="text-lg font-semibold">Extracting Data...</h2>
+                        <h2 className="text-lg font-semibold">{isContextStale ? "Loading document..." : "Extracting Data..."}</h2>
                     </div>
                 </div>
                 <div className="p-8 space-y-4">
@@ -288,7 +297,7 @@ export function ResultTab({ onHighlight, onRequestCompare }: ResultTabProps) {
                         ))}
                      </div>
                      <div className="flex justify-center text-muted-foreground text-sm pt-4 animate-pulse">
-                        Comparing models, please wait...
+                        {isContextStale ? "Syncing context..." : "Comparing models, please wait..."}
                      </div>
                 </div>
             </div>

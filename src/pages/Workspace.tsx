@@ -31,10 +31,11 @@ const tabs: { id: TabType; label: string; icon: typeof FileText }[] = [
 export default function Workspace() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { documents, activeDocumentId, setActiveDocument, dataCache, cacheData, removeDocument, clearDocuments } = useDocumentContext();
+  const { documents, activeDocumentId, setActiveDocument, addDocument, dataCache, cacheData, removeDocument, clearDocuments } = useDocumentContext();
   
   // Get whisper_hash from URL
   const urlHash = searchParams.get("whisper_hash");
+  const urlFileName = searchParams.get("fileName");
   
   // Find active document by hash or by activeDocumentId
   const activeDocument = useMemo(() => {
@@ -52,8 +53,35 @@ export default function Workspace() {
     return documents.find((d) => d.status === "complete" && d.whisperHash) || null;
   }, [documents, urlHash, activeDocumentId]);
 
+  // Sync URL hash to DocumentContext (Ensure newly uploaded files appear in dropdown)
+  useEffect(() => {
+    if (urlHash) {
+        const existing = documents.find(d => d.whisperHash === urlHash);
+        
+        if (!existing) {
+            // New document from upload (not in context yet)
+            const newDocId = `doc_${Date.now()}`;
+            addDocument({
+                id: newDocId,
+                name: urlFileName || "Uploaded Document",
+                fileName: urlFileName || "Uploaded Document", // Ensure filename is set
+                status: "complete",
+                whisperHash: urlHash,
+                size: 0,
+                type: "application/pdf",
+                progress: 100
+            });
+            setActiveDocument(newDocId);
+        } else if (existing.id !== activeDocumentId) {
+            // Document exists but not active, sync it
+            setActiveDocument(existing.id);
+        }
+    }
+  }, [urlHash, urlFileName, documents, activeDocumentId, addDocument, setActiveDocument]);
+
   const whisperHash = activeDocument?.whisperHash || urlHash;
-  const fileName = activeDocument?.fileName || activeDocument?.name || searchParams.get("fileName") || "document";
+  // Prefer urlFileName if available and activeDocument is missing to avoid "document" fallback immediately
+  const fileName = activeDocument?.fileName || activeDocument?.name || urlFileName || "document";
 
   const [resultText, setResultText] = useState<string>("");
   const [lineMetadata, setLineMetadata] = useState<any[]>([]);
@@ -573,7 +601,7 @@ export default function Workspace() {
 
 
       case "result":
-        return <ResultTab onHighlight={(lines) => handleStructuredHighlight(lines, true)} onRequestCompare={() => setActiveTab("compare")} />;
+        return <ResultTab whisperHash={whisperHash} onHighlight={(lines) => handleStructuredHighlight(lines, true)} onRequestCompare={() => setActiveTab("compare")} />;
       case "compare":
         return <ComparisonTab whisperHash={whisperHash} onHighlight={(lines) => handleStructuredHighlight(lines, true)} />;
     }

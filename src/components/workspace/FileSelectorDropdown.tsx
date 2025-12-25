@@ -1,13 +1,13 @@
-import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { ChevronDown, FileText, Check, Trash2 } from "lucide-react";
-import { cn } from "@/lib/utils";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
+import { AnimatePresence, motion } from "framer-motion";
+import { Check, ChevronDown, FileText, Trash2 } from "lucide-react";
+import { useState } from "react";
 
 interface FileSelectorDropdownProps {
   files: { id: string; name: string }[];
@@ -68,9 +68,8 @@ export function FileSelectorDropdown({
             <motion.div
               initial={{ opacity: 0, y: -10, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -10, scale: 0.95 }}
               transition={{ duration: 0.2 }}
-              className="absolute top-full left-0 mt-2 w-full max-w-xs glass rounded-xl overflow-hidden z-50 shadow-xl"
+              className="absolute top-full left-0 mt-2 w-max max-w-[90vw] min-w-full glass rounded-xl overflow-hidden z-50 shadow-xl"
             >
               {files.map((file) => (
                 <div
@@ -94,7 +93,7 @@ export function FileSelectorDropdown({
                           className="flex items-center gap-3 flex-1 text-left min-w-0"
                         >
                           <FileText className="w-4 h-4 flex-shrink-0" />
-                          <span className="truncate flex-1">{file.name}</span>
+                          <span className="whitespace-nowrap">{file.name}</span>
                           {file.id === selectedId && (
                             <Check className="w-4 h-4 text-primary flex-shrink-0" />
                           )}
