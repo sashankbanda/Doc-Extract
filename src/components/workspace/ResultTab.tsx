@@ -211,6 +211,9 @@ export function ResultTab({ onHighlight, onRequestCompare }: ResultTabProps) {
                             Review
                         </Button>
                     </div>
+                    <div className="text-xs text-muted-foreground ml-4">
+                        Comparing {filteredRows.length} fields
+                    </div>
                 </div>
                 
                 <div className="flex items-center gap-2 flex-wrap justify-end">
