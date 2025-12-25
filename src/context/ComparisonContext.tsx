@@ -1,6 +1,7 @@
 import { StructuredItem, structureDocument } from '@/lib/api';
 import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
+import { useDocumentContext } from './DocumentContext';
 
 export interface ComparisonRow {
     key: string;
@@ -52,13 +53,27 @@ interface ComparisonContextType {
     setFocusKey: (key: string | null) => void;
 }
 
+// ComparisonContextType definition remains same... (it is not included in this chunks replacement range)
+
 const ComparisonContext = createContext<ComparisonContextType | undefined>(undefined);
 
-export function ComparisonProvider({ children, whisperHash }: { children: ReactNode, whisperHash?: string | null }) {
+export function ComparisonProvider({ children }: { children: ReactNode }) {
+    const { activeDocumentId, documents } = useDocumentContext();
+    
+    // Derive active whisperHash from DocumentContext
+    const validHash = useMemo(() => {
+        if (!activeDocumentId) return null;
+        const doc = documents.find(d => d.id === activeDocumentId);
+        return doc?.whisperHash || null;
+    }, [activeDocumentId, documents]);
+
+    // Use a ref or state to track the "current" hash for effects, 
+    // but simply using validHash directly is cleaner.
+    const whisperHash = validHash;
     
     // Helper to load from storage
     const loadState = <T,>(key: string, defaultVal: T): T => {
-        if (!whisperHash) return defaultVal;
+        if (!whisperHash) return defaultVal; // Return default if no document active
         try {
             const stored = localStorage.getItem(`comparison_${whisperHash}_${key}`);
             return stored ? JSON.parse(stored) : defaultVal;
@@ -68,30 +83,54 @@ export function ComparisonProvider({ children, whisperHash }: { children: ReactN
         }
     };
 
-    // Default models (matching the first two in AVAILABLE_MODELS)
-    const [modelA, setModelA] = useState<string>(() => loadState("modelA", "groq/llama-3.3-70b-versatile"));
-    const [modelB, setModelB] = useState<string>(() => loadState("modelB", "gemini/gemini-2.5-flash")); // Updated default
-
-    const [customModelA, setCustomModelA] = useState(() => loadState("customModelA", ""));
-    const [customModelB, setCustomModelB] = useState(() => loadState("customModelB", ""));
-    const [isCustomA, setIsCustomA] = useState(() => loadState("isCustomA", false));
-    const [isCustomB, setIsCustomB] = useState(() => loadState("isCustomB", false));
-
-    const [dataA, setDataA] = useState<StructuredItem[] | null>(() => loadState("dataA", null));
-    const [dataB, setDataB] = useState<StructuredItem[] | null>(() => loadState("dataB", null));
-    
-    // Loading states moved to context
+    // Default models
+    const [modelA, setModelA] = useState<string>("groq/llama-3.3-70b-versatile");
+    const [modelB, setModelB] = useState<string>("gemini/gemini-2.5-flash");
+    const [customModelA, setCustomModelA] = useState("");
+    const [customModelB, setCustomModelB] = useState("");
+    const [isCustomA, setIsCustomA] = useState(false);
+    const [isCustomB, setIsCustomB] = useState(false);
+    const [dataA, setDataA] = useState<StructuredItem[] | null>(null);
+    const [dataB, setDataB] = useState<StructuredItem[] | null>(null);
     const [loadingA, setLoadingA] = useState(false);
     const [loadingB, setLoadingB] = useState(false);
+    const [filter, setFilter] = useState<"all" | "mismatch" | "match">("all");
+    const [approvedItems, setApprovedItems] = useState<Record<string, string>>({});
+    const [deletedKeys, setDeletedKeys] = useState<Set<string>>(new Set());
 
-    const [filter, setFilter] = useState<"all" | "mismatch" | "match">(() => loadState("filter", "all"));
+    // Effect: Reload state when whisperHash changes
+    useEffect(() => {
+        if (!whisperHash) {
+            // Optional: Reset state if no document? Or keep last viewed?
+            // Resetting is safer to avoid showing wrong data for "null" document
+            setDataA(null);
+            setDataB(null);
+            setApprovedItems({});
+            return;
+        }
 
-    // Keyed by source_key. Stores the definitive value.
-    const [approvedItems, setApprovedItems] = useState<Record<string, string>>(() => loadState("approvedItems", {}));
-    
-    // Set of keys that have been deleted by the user
-    // We use a Set<string> but store as array in localStorage
-    const [deletedKeys, setDeletedKeys] = useState<Set<string>>(() => new Set(loadState("deletedKeys", [])));
+        const load = <T,>(key: string, defaultVal: T): T => {
+            try {
+                const stored = localStorage.getItem(`comparison_${whisperHash}_${key}`);
+                return stored ? JSON.parse(stored) : defaultVal;
+            } catch { return defaultVal; }
+        };
+
+        setModelA(load("modelA", "groq/llama-3.3-70b-versatile"));
+        setModelB(load("modelB", "gemini/gemini-2.5-flash"));
+        setCustomModelA(load("customModelA", ""));
+        setCustomModelB(load("customModelB", ""));
+        setIsCustomA(load("isCustomA", false));
+        setIsCustomB(load("isCustomB", false));
+        setDataA(load("dataA", null));
+        setDataB(load("dataB", null));
+        setFilter(load("filter", "all"));
+        setApprovedItems(load("approvedItems", {}));
+        setDeletedKeys(new Set(load("deletedKeys", [])));
+        
+        // Don't modify loading state here - assume false on initial load 
+        // (unless we want to resume? but requests are not persistent across reload)
+    }, [whisperHash]);
 
     // Save state on change
     useEffect(() => {

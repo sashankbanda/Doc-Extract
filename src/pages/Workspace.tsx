@@ -5,17 +5,16 @@ import { ExtractedTextPanel } from "@/components/workspace/ExtractedTextPanel";
 import { PDFViewerWrapper } from "@/components/workspace/PDFViewerWrapper";
 import { ResultTab } from "@/components/workspace/ResultTab";
 import { TwoPaneLayout } from "@/components/workspace/TwoPaneLayout";
-import { ComparisonProvider } from "@/context/ComparisonContext";
 import { useDocumentContext } from "@/context/DocumentContext";
 import { API_BASE, apiHighlight, apiRetrieve } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { BoundingBox, LayoutText } from "@/types/document";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  CheckCircle2, FileText, GitCompare, Maximize2,
-  Minimize2,
-  Search,
-  X
+    CheckCircle2, FileText, GitCompare, Maximize2,
+    Minimize2,
+    Search,
+    X
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -612,7 +611,7 @@ export default function Workspace() {
 
   return (
     <div className="min-h-screen pt-16">
-      <ComparisonProvider key={whisperHash} whisperHash={whisperHash}>
+      {/* <ComparisonProvider> removed - using Global Provider */}
       <TwoPaneLayout
         leftPane={
           isPdf ? (
@@ -800,7 +799,7 @@ export default function Workspace() {
           </div>
         }
       />
-      </ComparisonProvider>
+      {/* </ComparisonProvider> */}
     </div>
   );
 }
