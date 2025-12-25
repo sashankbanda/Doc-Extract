@@ -436,20 +436,50 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
 
     // Handle focusKey change (from ResultTab redirect)
     useEffect(() => {
-        if (focusKey && filteredRows.length > 0) {
+        if (focusKey) {
+            // Force reset filter if needed so we can find the item
+            if (filter !== 'all') {
+                setFilter('all');
+                // The filter state update is async, so we might need to rely on the next render cycle 
+                // or memo dependency to catch it. However, setting it here queues the re-render.
+                // We should wait effectively? 
+                
+                // Better approach: Let this effect run, set filter, then when filteredRows updates, 
+                // we check focusKey again (handled by the dependency on filter/filteredRows).
+                 return; 
+            }
+            
+            // Now try to find it
             const index = filteredRows.findIndex(r => r.key === focusKey);
             if (index !== -1) {
-                // Determine which panel to focus - prefer non-empty panel if possible, else default to A
-                // If mismatch, usually one side might be null/empty, or both differ.
-                // We'll just default to A for now as it's the primary.
+                // Found it!
                 setSelectedRow(index);
-                // Also scroll explicitly if needed, but the effect above handles it based on selectedRow change.
+                // Also explicitly scroll to it now
+                // setTimeout ensures DOM is reflected if just switched tabs
+                setTimeout(() => {
+                    const rowId = `row-unified-${index}`;
+                     const element = document.getElementById(rowId);
+                     if (element) {
+                         element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                         // Also trigger highlight for that row
+                         const row = filteredRows[index];
+                         if (row) {
+                             const lines = row.lineNumbersA.length > 0 ? row.lineNumbersA : row.lineNumbersB;
+                             onHighlight?.(lines);
+                         }
+                     } else {
+                         console.warn("[ComparisonTab] Could not find element", rowId);
+                     }
+                }, 100);
                 
                 // Clear the focus key so it doesn't re-trigger
                 setFocusKey(null);
+            } else {
+                 // Not found yet (maybe data loading?)
+                 // If data is loaded and still not found, then it's actually missing.
             }
         }
-    }, [focusKey, filteredRows, setFocusKey]);
+    }, [focusKey, filteredRows, setFocusKey, filter, setFilter, onHighlight]);
     
     // Model Names for Headers
     const getModelName = (id: string, isCustom: boolean, custom: string) => {
