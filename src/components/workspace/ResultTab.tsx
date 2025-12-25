@@ -21,8 +21,8 @@ import {
 } from "@/components/ui/table";
 import { useComparisonContext } from "@/context/ComparisonContext";
 import { cn } from "@/lib/utils";
-import { CheckCircle2, Loader2, Play, Trash2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { CheckCircle2, ChevronDown, ChevronUp, Loader2, Play, Trash2, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 interface ResultTabProps {
     onHighlight?: (lines: number[]) => void;
@@ -42,11 +42,80 @@ export function ResultTab({ onHighlight, onRequestCompare }: ResultTabProps) {
         loadingB, 
         setFocusKey,
         resultFilter,
-        setResultFilter
+        setResultFilter,
+        searchQuery,
+        setSearchQuery
     } = useComparisonContext(); 
     
     // const [filter, setFilter] = useState<'all' | 'approved' | 'null'>('all'); // Moved to context
     const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+
+    // Search State
+    const [searchMatches, setSearchMatches] = useState<number[]>([]);
+    const [currentMatchIndex, setCurrentMatchIndex] = useState<number>(-1);
+
+    const filteredRows = useMemo(() => comparisonRows.filter(row => {
+        if (resultFilter === 'all') return true;
+        const approvedVal = approvedItems[row.key];
+        if (resultFilter === 'approved') return approvedVal !== undefined;
+        // 'review' (formerly 'null') means mismatch and not approved
+        if (resultFilter === 'review') return approvedVal === undefined && !row.isMatch;
+        return true;
+    }), [comparisonRows, resultFilter, approvedItems]);
+
+    // Calculate matches when query or rows change
+    useEffect(() => {
+        if (!searchQuery) {
+            setSearchMatches([]);
+            setCurrentMatchIndex(-1);
+            return;
+        }
+
+        const query = searchQuery.toLowerCase();
+        const matches: number[] = [];
+
+        filteredRows.forEach((row, index) => {
+            const approvedVal = approvedItems[row.key];
+            const valToCheck = approvedVal !== undefined ? approvedVal : (row.isMatch ? row.valA : "null");
+            
+            if (
+                row.key.toLowerCase().includes(query) ||
+                String(valToCheck).toLowerCase().includes(query)
+            ) {
+                matches.push(index);
+            }
+        });
+
+        setSearchMatches(matches);
+        // If we have matches, select the first one if none selected, or try to keep current relative selection?
+        // Simple behavior: jump to first match on new search
+        if (matches.length > 0) {
+            setCurrentMatchIndex(0);
+            setSelectedIndex(matches[0]); // Auto-select/scroll
+        } else {
+            setCurrentMatchIndex(-1);
+        }
+    }, [searchQuery, filteredRows, approvedItems]); // approvedItems dependency ensures value updates re-trigger search
+
+    // Navigation handlers
+    const nextMatch = () => {
+        if (searchMatches.length === 0) return;
+        const next = (currentMatchIndex + 1) % searchMatches.length;
+        setCurrentMatchIndex(next);
+        setSelectedIndex(searchMatches[next]);
+    };
+
+    const prevMatch = () => {
+        if (searchMatches.length === 0) return;
+        const prev = (currentMatchIndex - 1 + searchMatches.length) % searchMatches.length;
+        setCurrentMatchIndex(prev);
+        setSelectedIndex(searchMatches[prev]);
+    };
+
+    const clearSearch = () => {
+        setSearchQuery("");
+    };
+
 
     // Alert Dialog State
     const [alertConfig, setAlertConfig] = useState<{
@@ -65,15 +134,6 @@ export function ResultTab({ onHighlight, onRequestCompare }: ResultTabProps) {
     
     const closeAlert = () => setAlertConfig(prev => ({ ...prev, open: false }));
 
-    const filteredRows = comparisonRows.filter(row => {
-        if (resultFilter === 'all') return true;
-        const approvedVal = approvedItems[row.key];
-        if (resultFilter === 'approved') return approvedVal !== undefined;
-        // 'review' (formerly 'null') means mismatch and not approved
-        if (resultFilter === 'review') return approvedVal === undefined && !row.isMatch;
-        return true;
-    });
-
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (filteredRows.length === 0) return;
         
@@ -91,6 +151,8 @@ export function ResultTab({ onHighlight, onRequestCompare }: ResultTabProps) {
             });
         }
     };
+
+
 
     // Auto-highlight and scroll when selectedIndex changes
     // Use a ref to track the last processed selection
@@ -279,6 +341,7 @@ export function ResultTab({ onHighlight, onRequestCompare }: ResultTabProps) {
                     <div className="text-xs text-muted-foreground ml-4">
                         {filteredRows.length} fields
                     </div>
+
                 </div>
                 
                 <div className="flex items-center gap-2 flex-wrap justify-end">
@@ -383,6 +446,43 @@ export function ResultTab({ onHighlight, onRequestCompare }: ResultTabProps) {
                     </Button>
                 </div>
             </div>
+
+            {/* Search Overlay */}
+            {searchQuery && (
+                <div className="fixed top-32 right-6 z-50 flex items-center bg-background/95 backdrop-blur-sm border rounded-full shadow-lg h-10 px-3 gap-2 animate-in slide-in-from-top-4 items-center">
+                    <span className="text-sm font-medium text-foreground mr-1 font-mono w-12 text-center">
+                        {searchMatches.length > 0 ? currentMatchIndex + 1 : 0} / {searchMatches.length}
+                    </span>
+                    <div className="h-5 w-[1px] bg-border mx-1" />
+                    <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8 rounded-full hover:bg-muted" 
+                        onClick={prevMatch}
+                        disabled={searchMatches.length === 0}
+                    >
+                        <ChevronUp className="h-4 w-4" />
+                    </Button>
+                    <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8 rounded-full hover:bg-muted" 
+                        onClick={nextMatch}
+                        disabled={searchMatches.length === 0}
+                    >
+                        <ChevronDown className="h-4 w-4" />
+                    </Button>
+                    <div className="h-5 w-[1px] bg-border mx-1" />
+                    <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8 rounded-full hover:bg-destructive/10 hover:text-destructive" 
+                        onClick={clearSearch}
+                    >
+                        <X className="h-4 w-4" />
+                    </Button>
+                </div>
+            )}
 
             <ScrollArea className="flex-1 h-full bg-background">
                 <div 

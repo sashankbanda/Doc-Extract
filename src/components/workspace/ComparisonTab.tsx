@@ -14,7 +14,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useComparisonContext } from "@/context/ComparisonContext";
 import { cn } from "@/lib/utils";
-import { ArrowRight, Check, CheckCircle2, Edit2, Loader2, Play, Trash2, X } from "lucide-react";
+import { ArrowRight, Check, CheckCircle2, ChevronDown, ChevronUp, Edit2, Loader2, Play, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 // Available models
@@ -171,7 +171,8 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
         updateItem,
 
         deleteItem,
-        focusKey, setFocusKey
+        focusKey, setFocusKey,
+        searchQuery
     } = useComparisonContext();
     
     // Local run extraction removed, using context runComparison
@@ -195,6 +196,66 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
     });
     
     const closeAlert = () => setAlertConfig(prev => ({ ...prev, open: false }));
+    
+    // Search Logic
+    const [searchMatches, setSearchMatches] = useState<number[]>([]); // Indicies of rows
+    const [currentMatchIndex, setCurrentMatchIndex] = useState<number>(-1);
+
+    useEffect(() => {
+        if (!searchQuery) {
+            setSearchMatches([]);
+            setCurrentMatchIndex(-1);
+            return;
+        }
+
+        const query = searchQuery.toLowerCase();
+        const matches: number[] = [];
+
+        comparisonRows.forEach((row, index) => {
+            // Respect Filter
+            if (filter === 'mismatch' && row.isMatch) return;
+            if (filter === 'match' && !row.isMatch) return;
+
+            const approvedVal = approvedItems[row.key];
+            const valA = approvedVal !== undefined ? approvedVal : row.valA;
+            const valB = approvedVal !== undefined ? approvedVal : row.valB;
+
+            if (
+                row.key.toLowerCase().includes(query) ||
+                valA.toLowerCase().includes(query) ||
+                valB.toLowerCase().includes(query)
+            ) {
+                matches.push(index);
+            }
+        });
+
+        setSearchMatches(matches);
+        if (matches.length > 0) {
+            setCurrentMatchIndex(0);
+            // Optional: Auto-scroll to first match? 
+            // Might conflict with user focus, but requested "auto scroll to exact match"
+            setSelectedRow(matches[0]);
+        } else {
+            setCurrentMatchIndex(-1);
+        }
+    }, [searchQuery, comparisonRows, filter, approvedItems]);
+
+    const nextMatch = () => {
+        if (searchMatches.length === 0) return;
+        const next = (currentMatchIndex + 1) % searchMatches.length;
+        setCurrentMatchIndex(next);
+        setSelectedRow(searchMatches[next]);
+    };
+
+    const prevMatch = () => {
+        if (searchMatches.length === 0) return;
+        const prev = (currentMatchIndex - 1 + searchMatches.length) % searchMatches.length;
+        setCurrentMatchIndex(prev);
+        setSelectedRow(searchMatches[prev]);
+    };
+    
+    // Clear search
+    const { setSearchQuery } = useComparisonContext(); // Need setter locally if not destructured
 
     useEffect(() => {
         if (!containerRef.current) return;
@@ -353,7 +414,7 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
                             variant={filter === "match" ? "secondary" : "ghost"} 
                             size="sm" 
                             onClick={() => setFilter("match")}
-                            className="h-7 text-green-600 hover:text-green-600"
+                            className="h-7 text-green-600 hover:text-green-700"
                         >
                             Matches Only
                         </Button>
@@ -363,6 +424,44 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
                     </div>
                 </div>
             </div>
+            
+            {/* Search Overlay */}
+            {searchQuery && (
+                <div className="fixed top-32 right-6 z-50 flex items-center bg-background/95 backdrop-blur-sm border rounded-full shadow-lg h-10 px-3 gap-2 animate-in slide-in-from-top-4 items-center">
+                    <span className="text-sm font-medium text-foreground mr-1 font-mono w-12 text-center">
+                        {searchMatches.length > 0 ? currentMatchIndex + 1 : 0} / {searchMatches.length}
+                    </span>
+                    <div className="h-5 w-[1px] bg-border mx-1" />
+                    <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8 rounded-full hover:bg-muted" 
+                        onClick={prevMatch}
+                        disabled={searchMatches.length === 0}
+                    >
+                        <ChevronUp className="h-4 w-4" />
+                    </Button>
+                    <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8 rounded-full hover:bg-muted" 
+                        onClick={nextMatch}
+                        disabled={searchMatches.length === 0}
+                    >
+                        <ChevronDown className="h-4 w-4" />
+                    </Button>
+                    <div className="h-5 w-[1px] bg-border mx-1" />
+                    <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8 rounded-full hover:bg-destructive/10 hover:text-destructive" 
+                        onClick={() => setSearchQuery("")}
+                    >
+                        <X className="h-4 w-4" />
+                    </Button>
+                </div>
+            )}
+
             
             {/* Split View Results */}
             <div className={cn(

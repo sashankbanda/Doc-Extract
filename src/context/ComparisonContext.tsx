@@ -19,6 +19,7 @@ export interface ComparisonRow {
 
 interface ComparisonContextType {
     searchQuery: string;
+    setSearchQuery: (query: string) => void;
     modelA: string;
     modelB: string;
     setModelA: (model: string) => void;
@@ -98,6 +99,7 @@ export function ComparisonProvider({ children }: { children: ReactNode }) {
     const [loadingB, setLoadingB] = useState(false);
     const [filter, setFilter] = useState<"all" | "mismatch" | "match">("all");
     const [resultFilter, setResultFilter] = useState<"all" | "approved" | "review">("all");
+    const [searchQuery, setSearchQuery] = useState("");
     const [approvedItems, setApprovedItems] = useState<Record<string, string>>({});
     const [deletedKeys, setDeletedKeys] = useState<Set<string>>(new Set());
 
@@ -108,6 +110,8 @@ export function ComparisonProvider({ children }: { children: ReactNode }) {
             // Resetting is safer to avoid showing wrong data for "null" document
             setDataA(null);
             setDataB(null);
+            setResultFilter("all");
+            setSearchQuery("");
             setApprovedItems({});
             return;
         }
@@ -357,7 +361,8 @@ export function ComparisonProvider({ children }: { children: ReactNode }) {
     };
 
     const value = {
-        searchQuery: "", // Placeholder if needed or remove
+        searchQuery,
+        setSearchQuery,
         modelA,
         modelB,
         setModelA,

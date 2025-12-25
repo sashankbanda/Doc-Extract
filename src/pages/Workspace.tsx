@@ -5,6 +5,7 @@ import { ExtractedTextPanel } from "@/components/workspace/ExtractedTextPanel";
 import { PDFViewerWrapper } from "@/components/workspace/PDFViewerWrapper";
 import { ResultTab } from "@/components/workspace/ResultTab";
 import { TwoPaneLayout } from "@/components/workspace/TwoPaneLayout";
+import { useComparisonContext } from "@/context/ComparisonContext";
 import { useDocumentContext } from "@/context/DocumentContext";
 import { API_BASE, apiHighlight, apiRetrieve } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -78,7 +79,8 @@ export default function Workspace() {
   const textItemRefs = useRef<Map<number, HTMLDivElement>>(new Map());
 
 
-  const [searchQuery, setSearchQuery] = useState<string>("");
+  const { searchQuery, setSearchQuery } = useComparisonContext();
+  // const [searchQuery, setSearchQuery] = useState<string>(""); // Moved to context
   const extractedTextPanelRef = useRef<HTMLDivElement>(null);
   const rightPaneRef = useRef<HTMLDivElement>(null);
 
