@@ -47,7 +47,8 @@ function ComparisonCell({
     isMatch, 
     isApproved,
     onApprove, 
-    onUpdate 
+    onUpdate,
+    loading 
 }: {
     model: 'A' | 'B';
     index?: number;
@@ -59,6 +60,7 @@ function ComparisonCell({
     isApproved: boolean;
     onApprove: (key: string, val: string) => void;
     onUpdate: (model: 'A' | 'B', index: number, k: string, v: string) => void;
+    loading?: boolean;
 }) {
     const [isEditing, setIsEditing] = useState(false);
     const [editKey, setEditKey] = useState(rawKey);
@@ -122,6 +124,14 @@ function ComparisonCell({
     // Helper to check if value is effectively missing
     const isMissing = (val: string | null | undefined) => !val || val === "(missing)" || val === "null" || val === "undefined";
     const hasMissingSide = isMissing(value) || isMissing(diffValue);
+
+    if (loading) {
+        return (
+            <div className="group relative pr-16 min-h-[2rem] flex items-center group/cell">
+                <Skeleton className="h-4 w-full" />
+            </div>
+        );
+    }
 
     return (
         <div className="group relative pr-16 min-h-[2rem] flex items-center group/cell">
@@ -584,6 +594,7 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
                                                 isApproved={approvedItems[row.key] === row.valA}
                                                 onApprove={approveItem}
                                                 onUpdate={updateItem}
+                                                loading={loadingA}
                                             />
                                         </div>
 
@@ -616,6 +627,7 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
                                                 isApproved={approvedItems[row.key] === row.valB}
                                                 onApprove={approveItem}
                                                 onUpdate={updateItem}
+                                                loading={loadingB}
                                             />
                                         </div>
                                      </div>
