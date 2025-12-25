@@ -55,7 +55,7 @@ interface ComparisonContextType {
     approveItem: (key: string, value: string) => void;
     deleteItem: (key: string) => void;
     // Update Logic
-    updateItem: (model: 'A' | 'B', index: number, newKey: string, newValue: string) => void;
+    updateItem: (model: 'A' | 'B', index: number, newKey: string, newValue: string, pairedIndex?: number) => void;
     whisperHash: string | undefined | null;
     loadingA: boolean;
     loadingB: boolean;
@@ -432,6 +432,24 @@ export function ComparisonProvider({ children }: { children: ReactNode }) {
             }
             return newData;
         };
+
+        // Capture old key to check if we need to clear approval
+        // We need to read from current state 'dataA' or 'dataB'
+        const sourceData = model === 'A' ? dataA : dataB;
+        if (sourceData && index >= 0 && index < sourceData.length) {
+            const oldKey = sourceData[index].source_key;
+            
+            // If key changed, remove old approval
+            if (oldKey !== newKey) {
+                setApprovedItems(prev => {
+                    const next = { ...prev };
+                    delete next[oldKey];
+                    // Should we auto-approve the new key if value didn't change? 
+                    // Probably not, safer to require re-approval.
+                    return next;
+                });
+            }
+        }
 
         // 1. Update the primary target (Key + Value)
         if (model === 'A') {

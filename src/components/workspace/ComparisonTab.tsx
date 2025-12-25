@@ -291,6 +291,15 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
     });
     
     const closeAlert = () => setAlertConfig(prev => ({ ...prev, open: false }));
+
+    const filteredRows = useMemo(() => {
+        if (isContextStale) return [];
+        if (filter === "all") return comparisonRows;
+        if (filter === "mismatch") return comparisonRows.filter(r => !r.isMatch);
+        if (filter === "match") return comparisonRows.filter(r => r.isMatch);
+        if (filter === "warning") return comparisonRows.filter(r => r.tier === "warning");
+        return comparisonRows;
+    }, [comparisonRows, filter, isContextStale]);
     
     // Search Logic
     const [searchMatches, setSearchMatches] = useState<number[]>([]); // Indicies of rows
@@ -306,11 +315,8 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
         const query = searchQuery.toLowerCase();
         const matches: number[] = [];
 
-        comparisonRows.forEach((row, index) => {
-            // Respect Filter
-            if (filter === 'mismatch' && row.isMatch) return;
-            if (filter === 'match' && !row.isMatch) return;
-
+        
+        filteredRows.forEach((row, index) => {
             const approvedVal = approvedItems[row.key];
             const valA = approvedVal !== undefined ? approvedVal : row.valA;
             const valB = approvedVal !== undefined ? approvedVal : row.valB;
@@ -333,7 +339,7 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
         } else {
             setCurrentMatchIndex(-1);
         }
-    }, [searchQuery, comparisonRows, filter, approvedItems]);
+    }, [searchQuery, filteredRows, approvedItems]);
 
     const nextMatch = () => {
         if (searchMatches.length === 0) return;
@@ -372,15 +378,6 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
     // If `localStorage` is empty, we might want to fetch? 
     // The user's request focuses on explicitly running extraction. So let's leave auto-fetch out for now unless it was critical.
     
-    const filteredRows = useMemo(() => {
-        if (isContextStale) return [];
-        if (filter === "all") return comparisonRows;
-        if (filter === "mismatch") return comparisonRows.filter(r => !r.isMatch);
-        if (filter === "match") return comparisonRows.filter(r => r.isMatch);
-        if (filter === "warning") return comparisonRows.filter(r => r.tier === "warning");
-        return comparisonRows;
-    }, [comparisonRows, filter, isContextStale]);
-
     const [selectedRow, setSelectedRow] = useState<number | null>(null);
     const [selectedPanel, setSelectedPanel] = useState<'A' | 'B'>('A');
 
