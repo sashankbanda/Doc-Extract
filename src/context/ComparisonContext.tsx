@@ -37,6 +37,8 @@ interface ComparisonContextType {
     setDataB: (data: StructuredItem[] | null) => void;
     filter: "all" | "mismatch" | "match";
     setFilter: (filter: "all" | "mismatch" | "match") => void;
+    resultFilter: "all" | "approved" | "review";
+    setResultFilter: (filter: "all" | "approved" | "review") => void;
     resetComparisonState: () => void;
     comparisonRows: ComparisonRow[];
     // Approval State
@@ -95,6 +97,7 @@ export function ComparisonProvider({ children }: { children: ReactNode }) {
     const [loadingA, setLoadingA] = useState(false);
     const [loadingB, setLoadingB] = useState(false);
     const [filter, setFilter] = useState<"all" | "mismatch" | "match">("all");
+    const [resultFilter, setResultFilter] = useState<"all" | "approved" | "review">("all");
     const [approvedItems, setApprovedItems] = useState<Record<string, string>>({});
     const [deletedKeys, setDeletedKeys] = useState<Set<string>>(new Set());
 
@@ -125,6 +128,7 @@ export function ComparisonProvider({ children }: { children: ReactNode }) {
         setDataA(load("dataA", null));
         setDataB(load("dataB", null));
         setFilter(load("filter", "all"));
+        setResultFilter(load("resultFilter", "all"));
         setApprovedItems(load("approvedItems", {}));
         setDeletedKeys(new Set(load("deletedKeys", [])));
         
@@ -147,9 +151,10 @@ export function ComparisonProvider({ children }: { children: ReactNode }) {
         save("dataA", dataA);
         save("dataB", dataB);
         save("filter", filter);
+        save("resultFilter", resultFilter);
         save("approvedItems", approvedItems);
         save("deletedKeys", Array.from(deletedKeys));
-    }, [whisperHash, modelA, modelB, customModelA, customModelB, isCustomA, isCustomB, dataA, dataB, filter, approvedItems, deletedKeys]);
+    }, [whisperHash, modelA, modelB, customModelA, customModelB, isCustomA, isCustomB, dataA, dataB, filter, resultFilter, approvedItems, deletedKeys]);
 
 
     const resetComparisonState = () => {
@@ -158,6 +163,7 @@ export function ComparisonProvider({ children }: { children: ReactNode }) {
         setLoadingA(false);
         setLoadingB(false);
         setFilter("all");
+        setResultFilter("all");
         setApprovedItems({});
         setDeletedKeys(new Set());
         if (whisperHash) {
@@ -373,6 +379,8 @@ export function ComparisonProvider({ children }: { children: ReactNode }) {
         runComparison,
         filter,
         setFilter,
+        resultFilter,
+        setResultFilter,
         resetComparisonState,
         comparisonRows,
         approvedItems,

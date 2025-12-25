@@ -30,8 +30,22 @@ interface ResultTabProps {
 }
 
 export function ResultTab({ onHighlight, onRequestCompare }: ResultTabProps) {
-    const { comparisonRows, dataA, dataB, approvedItems, whisperHash, deleteItem, runComparison, loadingA, loadingB, setFocusKey } = useComparisonContext(); // Assume whisperHash is exposed
-    const [filter, setFilter] = useState<'all' | 'approved' | 'null'>('all');
+    const { 
+        comparisonRows, 
+        dataA, 
+        dataB, 
+        approvedItems, 
+        whisperHash, 
+        deleteItem,
+        runComparison, 
+        loadingA, 
+        loadingB, 
+        setFocusKey,
+        resultFilter,
+        setResultFilter
+    } = useComparisonContext(); 
+    
+    // const [filter, setFilter] = useState<'all' | 'approved' | 'null'>('all'); // Moved to context
     const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
     // Alert Dialog State
@@ -52,11 +66,11 @@ export function ResultTab({ onHighlight, onRequestCompare }: ResultTabProps) {
     const closeAlert = () => setAlertConfig(prev => ({ ...prev, open: false }));
 
     const filteredRows = comparisonRows.filter(row => {
-        if (filter === 'all') return true;
+        if (resultFilter === 'all') return true;
         const approvedVal = approvedItems[row.key];
-        if (filter === 'approved') return approvedVal !== undefined;
-        // null means mismatch and not approved
-        if (filter === 'null') return approvedVal === undefined && !row.isMatch;
+        if (resultFilter === 'approved') return approvedVal !== undefined;
+        // 'review' (formerly 'null') means mismatch and not approved
+        if (resultFilter === 'review') return approvedVal === undefined && !row.isMatch;
         return true;
     });
 
@@ -162,7 +176,7 @@ export function ResultTab({ onHighlight, onRequestCompare }: ResultTabProps) {
         });
 
         try {
-            await fetch("http://localhost:8005/export/save_result", {
+            const res = await fetch("http://localhost:8005/export/save_result", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -170,6 +184,9 @@ export function ResultTab({ onHighlight, onRequestCompare }: ResultTabProps) {
                     items: itemsToExport
                 })
             });
+            
+            if (!res.ok) throw new Error("Failed to save export");
+
             setAlertConfig({
                 open: true,
                 title: "Export Successful",
@@ -235,25 +252,25 @@ export function ResultTab({ onHighlight, onRequestCompare }: ResultTabProps) {
                 <div className="flex items-center gap-2">
                     <div className="flex items-center space-x-2 bg-muted/50 p-1 rounded-md border text-xs">
                         <Button 
-                            variant={filter === "all" ? "secondary" : "ghost"} 
+                            variant={resultFilter === "all" ? "secondary" : "ghost"} 
                             size="sm" 
-                            onClick={() => setFilter("all")}
+                            onClick={() => setResultFilter("all")}
                             className="h-7"
                         >
                             All
                         </Button>
                         <Button 
-                            variant={filter === "approved" ? "secondary" : "ghost"} 
+                            variant={resultFilter === "approved" ? "secondary" : "ghost"} 
                             size="sm" 
-                            onClick={() => setFilter("approved")}
-                            className="h-7 text-green-600 hover:text-green-600"
+                            onClick={() => setResultFilter("approved")}
+                            className="h-7 text-green-600 hover:text-green-700"
                         >
                             Approved
                         </Button>
                         <Button 
-                            variant={filter === "null" ? "secondary" : "ghost"} 
+                            variant={resultFilter === "review" ? "secondary" : "ghost"} 
                             size="sm" 
-                            onClick={() => setFilter("null")}
+                            onClick={() => setResultFilter("review")}
                             className="h-7 text-destructive hover:text-destructive"
                         >
                             Review
@@ -323,7 +340,7 @@ export function ResultTab({ onHighlight, onRequestCompare }: ResultTabProps) {
 
                             try {
                                 // 2. Save Result (Creates _result.json which Dashboard needs)
-                                await fetch("http://localhost:8005/export/save_result", {
+                                const saveRes = await fetch("http://localhost:8005/export/save_result", {
                                     method: "POST",
                                     headers: { "Content-Type": "application/json" },
                                     body: JSON.stringify({
@@ -331,9 +348,11 @@ export function ResultTab({ onHighlight, onRequestCompare }: ResultTabProps) {
                                         items: itemsToExport
                                     })
                                 });
+                                
+                                if (!saveRes.ok) throw new Error("Failed to save result");
 
                                 // 3. Update Status
-                                await fetch("http://localhost:8005/dashboard/status", {
+                                const statusRes = await fetch("http://localhost:8005/dashboard/status", {
                                     method: "POST",
                                     headers: { "Content-Type": "application/json" },
                                     body: JSON.stringify({
@@ -341,6 +360,8 @@ export function ResultTab({ onHighlight, onRequestCompare }: ResultTabProps) {
                                         status: "Completed"
                                     })
                                 });
+                                
+                                if (!statusRes.ok) throw new Error("Failed to update status");
                                 
                                 // 4. Redirect
                                 window.location.href = "/dashboard";
