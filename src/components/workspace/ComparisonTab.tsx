@@ -180,6 +180,42 @@ function ComparisonCell({
     );
 }
 
+const LoadingTimer = ({ isLoading }: { isLoading: boolean }) => {
+    const [elapsed, setElapsed] = useState(0);
+    const intervalRef = useRef<NodeJS.Timeout | null>(null);
+    const startTimeRef = useRef<number | null>(null);
+
+    useEffect(() => {
+        if (isLoading) {
+            startTimeRef.current = Date.now();
+            setElapsed(0);
+            intervalRef.current = setInterval(() => {
+                if (startTimeRef.current) {
+                    setElapsed(Date.now() - startTimeRef.current);
+                }
+            }, 50); // Update every 50ms
+        } else {
+            if (intervalRef.current) {
+                clearInterval(intervalRef.current);
+                intervalRef.current = null;
+            }
+        }
+        return () => {
+            if (intervalRef.current) {
+                clearInterval(intervalRef.current);
+            }
+        };
+    }, [isLoading]);
+
+    if (!isLoading && elapsed === 0) return null;
+
+    return (
+        <span className="text-[10px] font-mono tabular-nums text-muted-foreground ml-2">
+            {(elapsed / 1000).toFixed(2)}s
+        </span>
+    );
+};
+
 export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps & { onHighlight?: (lines: number[]) => void }) {
     const {
         modelA, setModelA,
@@ -500,15 +536,21 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
                      <div className={cn(
                         "bg-muted/30 border-b px-4 py-2 text-xs font-medium text-muted-foreground grid gap-4 sticky top-0 z-10 backdrop-blur-sm",
                         isNarrow ? "grid-cols-1" : "grid-cols-2"
-                     )}>
+                      )}>
                         <div className="flex items-center justify-between min-w-0">
-                             <span className="truncate max-w-[80%]">{nameA}</span>
-                             {loadingA && <Loader2 className="w-3 h-3 animate-spin text-primary" />}
+                             <div className="flex items-center min-w-0 flex-1 mr-2">
+                                <span className="truncate max-w-[80%]">{nameA}</span>
+                                <LoadingTimer isLoading={loadingA} />
+                             </div>
+                             {loadingA && <Loader2 className="w-3 h-3 animate-spin text-primary flex-shrink-0" />}
                         </div>
                         {!isNarrow && (
                             <div className="flex items-center justify-between min-w-0 pl-4 border-l">
-                                 <span className="truncate max-w-[80%]">{nameB}</span>
-                                 {loadingB && <Loader2 className="w-3 h-3 animate-spin text-primary" />}
+                                 <div className="flex items-center min-w-0 flex-1 mr-2">
+                                    <span className="truncate max-w-[80%]">{nameB}</span>
+                                    <LoadingTimer isLoading={loadingB} />
+                                 </div>
+                                 {loadingB && <Loader2 className="w-3 h-3 animate-spin text-primary flex-shrink-0" />}
                             </div>
                         )}
                     </div>
