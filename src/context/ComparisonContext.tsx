@@ -39,8 +39,8 @@ interface ComparisonContextType {
     dataB: StructuredItem[] | null;
     setDataA: (data: StructuredItem[] | null) => void;
     setDataB: (data: StructuredItem[] | null) => void;
-    filter: "all" | "mismatch" | "match";
-    setFilter: (filter: "all" | "mismatch" | "match") => void;
+    filter: "all" | "mismatch" | "match" | "warning";
+    setFilter: (filter: "all" | "mismatch" | "match" | "warning") => void;
     resultFilter: "all" | "approved" | "review";
     setResultFilter: (filter: "all" | "approved" | "review") => void;
     resetComparisonState: () => void;
@@ -105,7 +105,7 @@ export function ComparisonProvider({ children }: { children: ReactNode }) {
     const [dataB, setDataB] = useState<StructuredItem[] | null>(null);
     const [loadingA, setLoadingA] = useState(false);
     const [loadingB, setLoadingB] = useState(false);
-    const [filter, setFilter] = useState<"all" | "mismatch" | "match">("all");
+    const [filter, setFilter] = useState<"all" | "mismatch" | "match" | "warning">("all");
     const [resultFilter, setResultFilter] = useState<"all" | "approved" | "review">("all");
     const [searchQuery, setSearchQuery] = useState("");
     const [approvedItems, setApprovedItems] = useState<Record<string, string>>({});

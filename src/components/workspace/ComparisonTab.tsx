@@ -377,6 +377,7 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
         if (filter === "all") return comparisonRows;
         if (filter === "mismatch") return comparisonRows.filter(r => !r.isMatch);
         if (filter === "match") return comparisonRows.filter(r => r.isMatch);
+        if (filter === "warning") return comparisonRows.filter(r => r.tier === "warning");
         return comparisonRows;
     }, [comparisonRows, filter, isContextStale]);
 
@@ -536,13 +537,21 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
                         >
                             Mismatches Only
                         </Button>
-                         <Button 
+                        <Button 
                             variant={filter === "match" ? "secondary" : "ghost"} 
                             size="sm" 
                             onClick={() => setFilter("match")}
                             className="h-7 text-green-600 hover:text-green-700"
                         >
                             Matches Only
+                        </Button>
+                        <Button 
+                            variant={filter === "warning" ? "secondary" : "ghost"} 
+                            size="sm" 
+                            onClick={() => setFilter("warning")}
+                            className="h-7 text-yellow-600 hover:text-yellow-700"
+                        >
+                            Suspicious
                         </Button>
                     </div>
                     <div className="text-xs text-muted-foreground">
