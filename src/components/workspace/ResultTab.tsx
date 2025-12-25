@@ -212,7 +212,7 @@ export function ResultTab({ onHighlight, onRequestCompare }: ResultTabProps) {
                         </Button>
                     </div>
                     <div className="text-xs text-muted-foreground ml-4">
-                        Comparing {filteredRows.length} fields
+                        {filteredRows.length} fields
                     </div>
                 </div>
                 
