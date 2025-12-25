@@ -459,7 +459,11 @@ class LLMService:
             })
         
         # No items are skipped - all items are preserved (data loss prevention)
-        logger.info(f"[LLMService] Extracted {len(items)} items (all preserved, no data loss)")
+        
+        # NEW: Merge split items (e.g. multi-line descriptions) BEFORE tagging
+        items = self._merge_split_items(items)
+        
+        logger.info(f"[LLMService] Extracted {len(items)} items (after merging split lines)")
         
         # Add semantic_type tags to all items (deterministic, dictionary-based)
         tagged_items = semantic_tagger.tag_items(items)
@@ -609,6 +613,62 @@ class LLMService:
         return None
 
 
+
+    
+    def _merge_split_items(self, items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Merge consecutive items that have the same source_key and are likely split text lines.
+        This fixes issues where the LLM extracts multi-line text as separate items (e.g. Claim Description).
+        """
+        if not items:
+            return []
+            
+        merged = []
+        # Merge-safe canonical types (text blocks)
+        # Note: Canonical names are not yet assigned when this runs (we merge raw items), 
+        # so we rely on find_canonical_name helper or regex.
+        MERGE_SAFE_TYPES = [
+            "lossDescription", "notes", "lossLocation", "causeOfLoss", 
+            "claimant", "injuryDescription", "eventDescription"
+        ]
+        
+        # Merge-safe keywords (fallback)
+        MERGE_SAFE_KEYWORDS = ["desc", "note", "comment", "narrative", "detail", "cause", "summary"]
+
+        for item in items:
+            if not merged:
+                merged.append(item)
+                continue
+            
+            last = merged[-1]
+            
+            # Check for Key Match
+            if last['source_key'] == item['source_key']:
+                # Check for Merge Suitability
+                source_key_lower = item['source_key'].lower()
+                canonical = find_canonical_name(item['source_key'])
+                
+                is_mergeable = False
+                if canonical in MERGE_SAFE_TYPES:
+                    is_mergeable = True
+                elif any(w in source_key_lower for w in MERGE_SAFE_KEYWORDS):
+                    is_mergeable = True
+                
+                if is_mergeable:
+                    # Merge Logic
+                    # 1. Append Value (with space)
+                    last['value'] += " " + item['value']
+                    
+                    # 2. Merge Line Numbers
+                    last['line_numbers'] = sorted(list(set(last['line_numbers'] + item['line_numbers'])))
+                    
+                    # Skip appending this item (it's fused)
+                    continue
+            
+            # If not merged, append as new
+            merged.append(item)
+            
+        return merged
 
 llm_service = LLMService()
 

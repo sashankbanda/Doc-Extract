@@ -86,23 +86,32 @@ class JurorService:
             
         try:
             response = await litellm.acompletion(**kwargs)
-            content = response["choices"][0]["message"]["content"]
-            result = litellm.utils.get_valid_json(content)
+            # parsing the response
+            content = response.choices[0].message.content
+            # extract json from code block if present
+            if "```json" in content:
+                match = re.search(r"```json\s*(\{.*?\})\s*```", content, re.DOTALL)
+                if match:
+                    content = match.group(1)
+            elif "```" in content:
+                 match = re.search(r"```\s*(\{.*?\})\s*```", content, re.DOTALL)
+                 if match:
+                     content = match.group(1)
             
-            # Default safe return
-            status = result.get("status", "verified").lower()
-            reason = result.get("reason", "Verified by Juror")
+            data = json.loads(content)
             
-            # Normalize status
-            if status not in ["verified", "suspicious"]:
-                status = "verified"
-                
-            return { "status": status, "reason": reason }
+            verification_status = data.get("verification_status", "unverified")
+            reason = data.get("reason", "No reason provided")
             
+            return {
+                "status": verification_status,
+                "reason": reason
+            }
         except Exception as e:
             logger.error(f"[JurorService] Verification failed: {e}")
-            # Fail open (assume verified if juror crashes, or maybe unverified?)
-            # Let's fail to 'unverified' so user checks it.
-            return { "status": "unverified", "reason": f"Juror error: {str(e)}" }
+            return {
+                "status": "unverified",
+                "reason": f"Juror error: {str(e)}"
+            }
 
 juror_service = JurorService()
