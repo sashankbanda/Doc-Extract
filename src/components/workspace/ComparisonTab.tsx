@@ -16,6 +16,7 @@ import { useComparisonContext } from "@/context/ComparisonContext";
 import { cn } from "@/lib/utils";
 import { ArrowRight, Check, CheckCircle2, ChevronDown, ChevronUp, Edit2, Loader2, Play, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { DiffViewer } from "./DiffViewer";
 
 // Available models
 const AVAILABLE_MODELS = [
@@ -42,6 +43,7 @@ function ComparisonCell({
     uniqueKey, // For approval (includes suffix)
     rawKey,    // For editing (actual key)
     value, 
+    diffValue, // The other model's value for diffing
     isMatch, 
     isApproved,
     onApprove, 
@@ -52,6 +54,7 @@ function ComparisonCell({
     uniqueKey: string;
     rawKey: string;
     value: string;
+    diffValue?: string;
     isMatch: boolean;
     isApproved: boolean;
     onApprove: (key: string, val: string) => void;
@@ -88,6 +91,8 @@ function ComparisonCell({
         onApprove(uniqueKey, value);
     };
 
+
+
     if (isEditing) {
         return (
             <div className="flex flex-col gap-2 p-1" onClick={e => e.stopPropagation()}>
@@ -114,12 +119,26 @@ function ComparisonCell({
         );
     }
 
+    // Helper to check if value is effectively missing
+    const isMissing = (val: string | null | undefined) => !val || val === "(missing)" || val === "null" || val === "undefined";
+    const hasMissingSide = isMissing(value) || isMissing(diffValue);
+
     return (
-        <div className="group relative pr-16 min-h-[2rem] flex items-center">
-            <span className={cn("break-words", isApproved && "font-bold text-green-700")}>
-                {value}
-                {isApproved && <CheckCircle2 className="w-3 h-3 inline-block ml-1 opacity-70" />}
-            </span>
+        <div className="group relative pr-16 min-h-[2rem] flex items-center group/cell">
+             <div className="text-sm font-mono break-all whitespace-pre-wrap flex-1">
+                {!isMatch && !isApproved && !hasMissingSide ? (
+                    <DiffViewer 
+                        oldValue={model === 'A' ? value : diffValue} 
+                        newValue={model === 'A' ? diffValue : value} 
+                        mode={model === 'A' ? 'old' : 'new'} 
+                    />
+                ) : (
+                    <span className={cn("break-words", isApproved && "font-bold text-green-700")}>
+                        {value === "null" || value === "undefined" ? <span className="text-muted-foreground italic">{value}</span> : value}
+                        {isApproved && <CheckCircle2 className="w-3 h-3 inline-block ml-1 opacity-70" />}
+                    </span>
+                )}
+            </div>
             
             {/* Actions (Visible on hover) */}
             <div className="absolute right-0 top-0 hidden group-hover:flex items-center bg-background/80 backdrop-blur-sm rounded-md shadow-sm border">
@@ -557,6 +576,7 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
                                                     uniqueKey={row.key}
                                                     rawKey={row.key.replace(/ \[\d+\]$/, '')}
                                                     value={row.valA}
+                                                    diffValue={row.valB}
                                                     isMatch={row.isMatch}
                                                     isApproved={approvedItems[row.key] === row.valA}
                                                     onApprove={approveItem}
@@ -640,6 +660,7 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
                                                     uniqueKey={row.key}
                                                     rawKey={row.key.replace(/ \[\d+\]$/, '')}
                                                     value={row.valB}
+                                                    diffValue={row.valA}
                                                     isMatch={row.isMatch}
                                                     isApproved={approvedItems[row.key] === row.valB}
                                                     onApprove={approveItem}
