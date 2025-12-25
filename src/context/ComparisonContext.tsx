@@ -417,34 +417,45 @@ export function ComparisonProvider({ children }: { children: ReactNode }) {
         });
     };
 
-    const updateItem = (model: 'A' | 'B', index: number, newKey: string, newValue: string) => {
-        const updateData = (prevData: StructuredItem[] | null) => {
+    const updateItem = (model: 'A' | 'B', index: number, newKey: string, newValue: string, pairedIndex?: number) => {
+        // Helper to update a specific dataset
+        const getUpdatedData = (prevData: StructuredItem[] | null, targetIndex: number, k: string, v?: string) => {
             if (!prevData) return null;
-            // We need to find the item. The comparison logic groups by keys, but here we might have the original index or need to find it.
-            // However, the cleanest way (since we render aligned rows) is if we know the item's identity. 
-            // BUT, our comparisonRows don't strictly Map 1:1 to indices if things are out of order.
-            // Actually, the Comparison Tab loop iterates: 
-            //    itemsA[i] which gives us the actual StructuredItem object. 
-            // If we find that object in the main array, we can update it.
-            
-            // IMPROVEMENT: ResultTab/ComparisonTab should pass the index relative to the source data array?
-            // "index" here will be treated as the index in the *source array* (dataA or dataB).
-            
             const newData = [...prevData];
-            if (index >= 0 && index < newData.length) {
-                newData[index] = {
-                    ...newData[index],
-                    source_key: newKey,
-                    value: newValue
+            if (targetIndex >= 0 && targetIndex < newData.length) {
+                newData[targetIndex] = {
+                    ...newData[targetIndex],
+                    source_key: k,
+                    // Only update value if provided (undefined means keep original)
+                    ...(v !== undefined ? { value: v } : {}) 
                 };
             }
             return newData;
         };
 
+        // 1. Update the primary target (Key + Value)
         if (model === 'A') {
-            setDataA(updateData(dataA));
+            setDataA(prev => {
+                const updatedA = getUpdatedData(prev, index, newKey, newValue);
+                
+                // 2. If paired, also update the OTHER model's KEY only
+                if (pairedIndex !== undefined && pairedIndex >= 0) {
+                    setDataB(prevB => getUpdatedData(prevB, pairedIndex, newKey, undefined));
+                }
+                
+                return updatedA;
+            });
         } else {
-            setDataB(updateData(dataB));
+            setDataB(prev => {
+                const updatedB = getUpdatedData(prev, index, newKey, newValue);
+                
+                // 2. If paired, also update the OTHER model's KEY only
+                if (pairedIndex !== undefined && pairedIndex >= 0) {
+                    setDataA(prevA => getUpdatedData(prevA, pairedIndex, newKey, undefined));
+                }
+                
+                return updatedB;
+            });
         }
     };
 

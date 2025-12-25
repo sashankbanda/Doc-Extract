@@ -708,7 +708,7 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
                                                 verificationReason={row.verificationReason}
                                                 isApproved={approvedItems[row.key] === row.valA}
                                                 onApprove={approveItem}
-                                                onUpdate={updateItem}
+                                                onUpdate={(m, i, k, v) => updateItem(m, i, k, v, row.indexB)}
                                                 loading={safeLoadingA}
                                             />
                                         </div>
@@ -743,7 +743,7 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
                                                 verificationReason={row.verificationReason}
                                                 isApproved={approvedItems[row.key] === row.valB}
                                                 onApprove={approveItem}
-                                                onUpdate={updateItem}
+                                                onUpdate={(m, i, k, v) => updateItem(m, i, k, v, row.indexA)}
                                                 loading={safeLoadingB}
                                             />
                                         </div>
