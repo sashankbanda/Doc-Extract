@@ -31,15 +31,20 @@ interface CellData {
     lineNumbers: number[];
 }
 
+interface TableGroup {
+    id: string;
+    columns: string[];
+    rows: ProcessedRow[];
+}
+
 export function TableTab({ onHighlight }: TableTabProps) {
     const { comparisonRows, approvedItems } = useComparisonContext();
 
-    // 1. Group Data by Line Number
-    const { tableRows, infoRows, allColumns } = useMemo(() => {
+    // 1. Group Data by Line Number and Split into Tables
+    const { tableGroups, infoRows } = useMemo(() => {
         const lineMap = new Map<number, ProcessedRow>();
-        const columnSet = new Set<string>();
-
-        // Phase 1: Grouping
+        
+        // --- Step 1: Basic grouping by Line Number ---
         comparisonRows.forEach(row => {
             // Determine Value (Reactive to approvedItems)
             const approvedVal = approvedItems[row.key];
@@ -74,10 +79,8 @@ export function TableTab({ onHighlight }: TableTabProps) {
 
             const lineGroup = lineMap.get(primaryLine)!;
             
-            // Allow multiple items with same baseKey on same line (edge case)?
-            // If so, append? For now, we assume unique per line per column logic.
-            // If data is dense (L17), we likely have unique headers.
-            
+            // Note: If multiple keys map to same baseKey on same line (e.g. "Amount [1]" and "Amount [2]"), 
+            // the last one overrides. For tables, unique headers per line are assumed.
             lineGroup.data[baseKey] = {
                 value: displayValue,
                 isApproved,
@@ -86,62 +89,134 @@ export function TableTab({ onHighlight }: TableTabProps) {
                 lineNumbers: row.lineNumbers
             };
             lineGroup.density += 1;
-            
-            // Collect potential columns
-            columnSet.add(baseKey);
         });
 
-        // Phase 2: Classification (Table vs Info)
         const sortedLines = Array.from(lineMap.values()).sort((a, b) => a.lineNumber - b.lineNumber);
         
-        // Strategy: 
-        // If a BaseKey appears in > 1 line, it's a Table Column.
-        // If a Line has > 3 items, it's likely a Table Row.
-        // Everything else is General Info.
-
-        const tableBaseKeys = new Set<string>();
+        // --- Step 2: Identify Potential Table Columns ---
         const keyFrequency = new Map<string, number>();
-
         sortedLines.forEach(line => {
             Object.keys(line.data).forEach(key => {
                 keyFrequency.set(key, (keyFrequency.get(key) || 0) + 1);
             });
         });
 
+        const potentialTableKeys = new Set<string>();
+        // Heuristic: If key appears > 1 times, it's a table column.
         keyFrequency.forEach((count, key) => {
-            if (count > 1) tableBaseKeys.add(key);
+            if (count > 1) potentialTableKeys.add(key);
         });
-        
-        // Force keys on "dense" lines (>2 items) to be table columns even if single occurrence?
-        // User example: L17 has many items. L7 has 1.
-        
-        const finalTableRows: ProcessedRow[] = [];
+
+        // --- Step 3: Classify Rows (Table vs Info) ---
+        const tableRowsPlaceholder: ProcessedRow[] = [];
         const finalInfoRows: ProcessedRow[] = [];
 
         sortedLines.forEach(line => {
-            // Is this a "Table Line" or "Info Line"?
-            // If it has any key that is part of a multi-line pattern -> Table
-            // OR if it's very dense (>3 cols) -> Table (Singleton Row of a big table)
-            
-            const hasRepeatingKey = Object.keys(line.data).some(k => tableBaseKeys.has(k));
+            const rowKeys = Object.keys(line.data);
+            const hasRepeatingKey = rowKeys.some(k => potentialTableKeys.has(k));
             const isDense = line.density > 2; 
 
             if (hasRepeatingKey || isDense) {
-                finalTableRows.push(line);
-                // Ensure all keys in this dense row are considered table columns
-                Object.keys(line.data).forEach(k => tableBaseKeys.add(k)); 
+                tableRowsPlaceholder.push(line);
+                // If it's a table row, ALL its keys are effectively part of the table structure
+                rowKeys.forEach(k => potentialTableKeys.add(k));
             } else {
                 finalInfoRows.push(line);
             }
         });
 
-        // Final Columns for the Table
-        const finalColumns = Array.from(tableBaseKeys).sort();
+        // --- Step 4: Cluster Columns into Disjoint Tables (Connected Components) ---
+        // Build Graph: Nodes = Columns, Edges = Co-occurrence in a row
+        const adjacency = new Map<string, Set<string>>();
+        tableRowsPlaceholder.forEach(row => {
+            const keys = Object.keys(row.data);
+            keys.forEach(k => {
+                if (!adjacency.has(k)) adjacency.set(k, new Set());
+            });
+            
+            // Connect all keys in this row to each other
+            for (let i = 0; i < keys.length; i++) {
+                for (let j = i + 1; j < keys.length; j++) {
+                    const u = keys[i];
+                    const v = keys[j];
+                    adjacency.get(u)!.add(v);
+                    adjacency.get(v)!.add(u);
+                }
+            }
+        });
+
+        const visited = new Set<string>();
+        const clusters: string[][] = [];
+
+        // Find connected components
+        adjacency.forEach((_, startNode) => {
+            if (visited.has(startNode)) return;
+
+            const component: string[] = [];
+            const queue = [startNode];
+            visited.add(startNode);
+
+            while (queue.length > 0) {
+                const node = queue.shift()!;
+                component.push(node);
+
+                const neighbors = adjacency.get(node);
+                if (neighbors) {
+                    neighbors.forEach(neighbor => {
+                        if (!visited.has(neighbor)) {
+                            visited.add(neighbor);
+                            queue.push(neighbor);
+                        }
+                    });
+                }
+            }
+            clusters.push(component.sort()); 
+        });
+
+        // --- Step 5: Assign Rows to Clusters ---
+        // A row belongs to a cluster if ANY of its keys are in that cluster.
+        // Since clusters are disjoint (by definition of connected components), a row maps to exactly one cluster.
+        // (Unless a row bridges two clusters, but then they would have been one component).
+        
+        const finalGroups: TableGroup[] = clusters.map((cols, idx) => ({
+            id: `table-${idx}`,
+            columns: cols,
+            rows: []
+        }));
+
+        tableRowsPlaceholder.forEach(row => {
+            const rowKeys = Object.keys(row.data);
+            if (rowKeys.length === 0) return; 
+
+            // Find matching cluster
+            const targetGroup = finalGroups.find(g => 
+                rowKeys.some(k => g.columns.includes(k))
+            );
+
+            if (targetGroup) {
+                targetGroup.rows.push(row);
+            } else {
+                // Should theoretically involve rows with keys that were not "potentialTableKeys"?
+                // But we used tableRowsPlaceholder to build the graph, so keys SHOULD be there.
+                // UNLESS potentialTableKeys logic excluded some unique keys that we still allowed pass?
+                // Logic: "rowKeys.forEach(k => potentialTableKeys.add(k))" ensures ALL keys of a table row are in the set.
+                // So this branch should be unreachable.
+                console.warn("[TableTab] Orphan row found:", row);
+            }
+        });
+
+        // Filter out empty groups and Sort groups by position of first row
+        const activeGroups = finalGroups
+            .filter(g => g.rows.length > 0)
+            .sort((a, b) => {
+                const minA = Math.min(...a.rows.map(r => r.lineNumber));
+                const minB = Math.min(...b.rows.map(r => r.lineNumber));
+                return minA - minB;
+            });
 
         return {
-            tableRows: finalTableRows,
-            infoRows: finalInfoRows,
-            allColumns: finalColumns
+            tableGroups: activeGroups,
+            infoRows: finalInfoRows
         };
 
     }, [comparisonRows, approvedItems]);
@@ -195,11 +270,16 @@ export function TableTab({ onHighlight }: TableTabProps) {
                         </div>
                     )}
 
-                    {/* 2. Structured Table Section */}
-                    {tableRows.length > 0 && (
-                        <div className="space-y-4">
+                    {/* 2. Structured Table Section(s) */}
+                    {tableGroups.map((group, groupIdx) => (
+                        <div key={group.id} className="space-y-4">
                              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
-                                <span className="bg-primary/10 text-primary px-2 py-0.5 rounded text-xs border border-primary/20">Line Items</span>
+                                <span className="bg-primary/10 text-primary px-2 py-0.5 rounded text-xs border border-primary/20">
+                                    Table {groupIdx + 1}
+                                </span>
+                                <span className="text-xs text-muted-foreground font-normal">
+                                    ({group.rows.length} rows)
+                                </span>
                             </h2>
                             <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
                                 <ScrollArea className="w-full">
@@ -210,7 +290,7 @@ export function TableTab({ onHighlight }: TableTabProps) {
                                                 {/* Left Buffer for Line # */}
                                                 <TableHead className="w-[50px] text-center text-xs font-bold text-muted-foreground">#</TableHead>
                                                 
-                                                {allColumns.map(col => (
+                                                {group.columns.map(col => (
                                                     <TableHead key={col} className="text-xs font-bold whitespace-nowrap min-w-[120px]">
                                                         {col}
                                                     </TableHead>
@@ -218,7 +298,7 @@ export function TableTab({ onHighlight }: TableTabProps) {
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            {tableRows.map((row) => (
+                                            {group.rows.map((row) => (
                                                 <TableRow key={row.lineNumber} className="group hover:bg-muted/30">
                                                     {/* Line Number Badge */}
                                                     <TableCell className="text-center py-2 h-auto">
@@ -228,7 +308,7 @@ export function TableTab({ onHighlight }: TableTabProps) {
                                                     </TableCell>
 
                                                     {/* Data Cells */}
-                                                    {allColumns.map(col => {
+                                                    {group.columns.map(col => {
                                                         const cell = row.data[col];
                                                         return (
                                                             <TableCell 
@@ -260,9 +340,9 @@ export function TableTab({ onHighlight }: TableTabProps) {
                                 </ScrollArea>
                             </div>
                         </div>
-                    )}
+                    ))}
 
-                    {infoRows.length === 0 && tableRows.length === 0 && (
+                    {infoRows.length === 0 && tableGroups.length === 0 && (
                          <div className="flex flex-col items-center justify-center h-40 text-muted-foreground">
                             <p>No processed data available to display.</p>
                         </div>
@@ -272,4 +352,3 @@ export function TableTab({ onHighlight }: TableTabProps) {
         </div>
     );
 }
-
