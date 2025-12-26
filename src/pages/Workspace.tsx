@@ -36,8 +36,8 @@ type TabType = "text" | "compare" | "result" | "table";
 
 const tabs: { id: TabType; label: string; icon: typeof FileText }[] = [
   { id: "result", label: "Result", icon: CheckCircle2 },
-  { id: "table", label: "Table", icon: Table },
   { id: "compare", label: "Compare Models", icon: GitCompare },
+  { id: "table", label: "Table", icon: Table },
   { id: "text", label: "Raw Text", icon: FileText },
 ];
 
