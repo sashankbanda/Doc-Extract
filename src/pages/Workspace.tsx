@@ -785,8 +785,8 @@ export default function Workspace() {
               </div>
               
               {/* Search Input */}
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <div className="relative w-64">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="relative flex-1 min-w-[140px] max-w-64">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
                     type="text"
