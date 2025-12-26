@@ -276,7 +276,8 @@ export function TableTab({ onHighlight }: TableTabProps) {
                             </h2>
                             <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
                                 <ScrollArea className="w-full">
-                                    <div className="w-max">
+                                    {/* Changed w-max to min-w-full so table fills space */}
+                                    <div className="min-w-full">
                                         <Table>
                                         <TableHeader>
                                             <TableRow className="bg-muted/50 hover:bg-muted/50">
