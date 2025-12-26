@@ -1,4 +1,14 @@
 import DocumentViewer, { guessFileType } from "@/components/DocumentViewer";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { ComparisonTab } from "@/components/workspace/ComparisonTab";
 import { ExtractedTextPanel } from "@/components/workspace/ExtractedTextPanel";
@@ -104,6 +114,40 @@ export default function Workspace() {
     setResultText("");
     setLineMetadata([]);
   }, [whisperHash]);
+
+  // Delete handling
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [fileToDelete, setFileToDelete] = useState<{id: string, name: string, whisperHash: string} | null>(null);
+
+  const handleDeleteRequest = useCallback((whisperHash: string) => {
+    const doc = documents.find(d => d.whisperHash === whisperHash);
+    if (!doc) return;
+    
+    setFileToDelete({
+        id: doc.id,
+        name: doc.fileName || doc.name,
+        whisperHash: doc.whisperHash!
+    });
+    setDeleteOpen(true);
+  }, [documents]);
+
+  const confirmDelete = async () => {
+    if (!fileToDelete) return;
+
+    try {
+        // 1. Delete from Backend
+        await fetch(`http://localhost:8005/dashboard/files/${fileToDelete.whisperHash}`, { method: 'DELETE' });
+        
+        // 2. Remove from Frontend Context
+        removeDocument(fileToDelete.id);
+
+    } catch (e) {
+        console.error("Failed to delete file", e);
+    } finally {
+        setDeleteOpen(false);
+        setFileToDelete(null);
+    }
+  };
 
   
   // Text tab state
@@ -672,12 +716,7 @@ export default function Workspace() {
                   );
                 }
               }}
-              onRemoveFile={(hash) => {
-                const doc = documents.find((d) => d.whisperHash === hash);
-                if (doc) {
-                  removeDocument(doc.id);
-                }
-              }}
+              onRemoveFile={(hash) => handleDeleteRequest(hash)}
             />
           ) : (
             <DocumentViewer
@@ -702,12 +741,7 @@ export default function Workspace() {
                   );
                 }
               }}
-              onRemoveFile={(hash) => {
-                const doc = documents.find((d) => d.whisperHash === hash);
-                if (doc) {
-                  removeDocument(doc.id);
-                }
-              }}
+              onRemoveFile={(hash) => handleDeleteRequest(hash)}
             />
           )
         }
@@ -834,6 +868,22 @@ export default function Workspace() {
         }
       />
       {/* </ComparisonProvider> */}
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete File</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{fileToDelete?.name}"? This action cannot be undone and will remove the file from your dashboard.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+             <AlertDialogCancel>Cancel</AlertDialogCancel>
+             <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+               Delete
+             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
