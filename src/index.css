@@ -7,8 +7,8 @@
 @layer base {
   :root {
     /* Light Theme - Modern Professional (Navy/Slate) */
-    --background: 210 40% 98%;
-    /* Slate 50 */
+    --background: 0 0% 100%;
+    /* Pure White */
     --foreground: 222 47% 11%;
     /* Slate 900 */
 
@@ -20,7 +20,7 @@
     --popover-foreground: 222 47% 11%;
 
     --primary: 222 47% 11%;
-    /* Navy (Slate 900) */
+    /* Navy (Slate 900) - Keep text readable */
     --primary-foreground: 210 40% 98%;
 
     --secondary: 210 40% 96.1%;
@@ -42,23 +42,41 @@
     --border: 214.3 31.8% 91.4%;
     /* Slate 200 */
     --input: 214.3 31.8% 91.4%;
-    --ring: 222 47% 11%;
-
+    --ring: 262 83% 58%;
+    /* Vivid Purple Ring */
     --radius: 0.5rem;
 
-    /* Custom tokens for light mode */
+    /* Custom tokens for light mode - COLORFUL UPGRADE */
     --glass-bg: 0 0% 100%;
     --glass-border: 214.3 31.8% 91.4%;
-    --glow-primary: 222 47% 11%;
-    /* Navy Glow */
-    --glow-secondary: 217 91% 60%;
-    /* Bright Blue Glow */
+
+    /* Semantic Gradient Colors (Vibrant for Light Mode) */
+    --gradient-1: 262 83% 58%;
+    /* Violet */
+    --gradient-2: 292 84% 61%;
+    /* Fuchsia */
+    --gradient-3: 221 83% 53%;
+    /* Blue */
+
+    --logo-fg: 0 0% 100%;
+    /* White Icon on vibrant background */
+
+    /* Vibrant Colors for Accents/Glows */
+    --color-violet: 262 83% 58%;
+    --color-fuchsia: 292 84% 61%;
+    --color-blue: 221 83% 53%;
+
+    --glow-primary: 262 83% 58%;
+    /* Violet Glow */
+    --glow-secondary: 221 83% 53%;
+    /* Blue */
+
     --surface-elevated: 0 0% 100%;
 
     /* Highlight Overlay Color */
-    --highlight-overlay: 217 91% 60%;
-    /* Bright Blue highlight to match accent */
-    --highlight-border: 217 91% 60%;
+    --highlight-overlay: 262 83% 58%;
+    /* Violet highlight */
+    --highlight-border: 262 83% 58%;
   }
 
   .dark {
@@ -94,6 +112,18 @@
     /* Custom tokens for dark mode */
     --glass-bg: 222 47% 11%;
     --glass-border: 222 30% 22%;
+
+    /* Semantic Gradient Colors (Cyan/Purple for Dark Mode) */
+    --gradient-1: 185 80% 55%;
+    /* Cyan */
+    --gradient-2: 260 60% 55%;
+    /* Purple */
+    --gradient-3: 185 80% 55%;
+    /* Cyan */
+
+    --logo-fg: 222 47% 6%;
+    /* Dark Navy Icon on Cyan background */
+
     --glow-primary: 185 80% 55%;
     --glow-secondary: 260 60% 55%;
     --surface-elevated: 222 40% 12%;
@@ -143,7 +173,7 @@
   }
 
   .text-gradient {
-    @apply bg-gradient-to-r from-[hsl(var(--primary))] via-[hsl(var(--secondary))] to-[hsl(var(--primary))] bg-clip-text text-transparent;
+    @apply bg-gradient-to-r from-[hsl(var(--gradient-1))] via-[hsl(var(--gradient-2))] to-[hsl(var(--gradient-3))] bg-clip-text text-transparent;
     background-size: 200% auto;
   }
 

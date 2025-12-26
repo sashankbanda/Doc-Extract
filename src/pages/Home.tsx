@@ -1,7 +1,7 @@
-import { motion } from "framer-motion";
-import { Link } from "react-router-dom";
 import { GlassButton } from "@/components/ui/GlassButton";
-import { ArrowRight, Sparkles, FileSearch, Zap } from "lucide-react";
+import { motion } from "framer-motion";
+import { ArrowRight, FileSearch, Sparkles, Zap } from "lucide-react";
+import { Link } from "react-router-dom";
 
 export default function Home() {
   return (
@@ -10,7 +10,7 @@ export default function Home() {
       <div className="absolute inset-0 overflow-hidden">
         {/* Primary glow orb */}
         <motion.div
-          className="absolute top-1/4 left-1/4 w-[500px] h-[500px] rounded-full bg-primary/20 blur-[120px]"
+          className="absolute top-1/4 left-1/4 w-[500px] h-[500px] rounded-full bg-[hsl(var(--glow-primary))] opacity-20 blur-[120px]"
           animate={{
             x: [0, 50, 0],
             y: [0, -30, 0],
@@ -24,7 +24,7 @@ export default function Home() {
         />
         {/* Secondary glow orb */}
         <motion.div
-          className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] rounded-full bg-secondary/15 blur-[100px]"
+          className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] rounded-full bg-[hsl(var(--glow-secondary))] opacity-15 blur-[100px]"
           animate={{
             x: [0, -40, 0],
             y: [0, 40, 0],

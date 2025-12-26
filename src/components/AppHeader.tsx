@@ -54,8 +54,8 @@ export function AppHeader() {
     >
       <div className="container mx-auto px-6 h-16 flex items-center justify-between">
         <Link to="/" className="flex items-center gap-3 group">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center glow-primary-subtle">
-            <FileText className="w-5 h-5 text-primary-foreground" />
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[hsl(var(--gradient-1))] to-[hsl(var(--gradient-2))] flex items-center justify-center glow-primary-subtle">
+            <FileText className="w-5 h-5 text-[hsl(var(--logo-fg))]" />
           </div>
           <span className="text-lg font-semibold text-foreground group-hover:text-primary transition-colors">
             DocExtract
