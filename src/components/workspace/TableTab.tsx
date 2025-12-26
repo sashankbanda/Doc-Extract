@@ -43,6 +43,8 @@ export function TableTab({ onHighlight }: TableTabProps) {
     // 1. Group Data by Line Number and Split into Tables
     const { tableGroups, infoRows } = useMemo(() => {
         const lineMap = new Map<number, ProcessedRow>();
+        const keyDiscoveryOrder = new Map<string, number>();
+        let discoveryCounter = 0;
         
         // --- Step 1: Basic grouping by Line Number ---
         comparisonRows.forEach(row => {
@@ -58,16 +60,18 @@ export function TableTab({ onHighlight }: TableTabProps) {
             }
 
             // Determine Line Number (Primary Sort Key)
-            // Use the first line number from Model A (primary) or Model B
-            // If empty, dump into a "0" or "-1" bucket
             const primaryLine = (row.lineNumbersA && row.lineNumbersA.length > 0) 
                 ? Math.min(...row.lineNumbersA) 
                 : (row.lineNumbersB && row.lineNumbersB.length > 0 ? Math.min(...row.lineNumbersB) : 0);
 
             // Determine Base Key (Column Name)
-            // Regex: Remove trailing index like " [1]"
             const baseKeyMatch = row.key.match(/^(.*?)(\s\[\d+\])?$/);
             const baseKey = baseKeyMatch ? baseKeyMatch[1] : row.key;
+
+            // Track discovery order (first valid appearance wins)
+            if (!keyDiscoveryOrder.has(baseKey)) {
+                keyDiscoveryOrder.set(baseKey, discoveryCounter++);
+            }
 
             if (!lineMap.has(primaryLine)) {
                 lineMap.set(primaryLine, {
@@ -79,8 +83,6 @@ export function TableTab({ onHighlight }: TableTabProps) {
 
             const lineGroup = lineMap.get(primaryLine)!;
             
-            // Note: If multiple keys map to same baseKey on same line (e.g. "Amount [1]" and "Amount [2]"), 
-            // the last one overrides. For tables, unique headers per line are assumed.
             lineGroup.data[baseKey] = {
                 value: displayValue,
                 isApproved,
@@ -118,7 +120,6 @@ export function TableTab({ onHighlight }: TableTabProps) {
 
             if (hasRepeatingKey || isDense) {
                 tableRowsPlaceholder.push(line);
-                // If it's a table row, ALL its keys are effectively part of the table structure
                 rowKeys.forEach(k => potentialTableKeys.add(k));
             } else {
                 finalInfoRows.push(line);
@@ -126,7 +127,6 @@ export function TableTab({ onHighlight }: TableTabProps) {
         });
 
         // --- Step 4: Cluster Columns into Disjoint Tables (Connected Components) ---
-        // Build Graph: Nodes = Columns, Edges = Co-occurrence in a row
         const adjacency = new Map<string, Set<string>>();
         tableRowsPlaceholder.forEach(row => {
             const keys = Object.keys(row.data);
@@ -134,7 +134,6 @@ export function TableTab({ onHighlight }: TableTabProps) {
                 if (!adjacency.has(k)) adjacency.set(k, new Set());
             });
             
-            // Connect all keys in this row to each other
             for (let i = 0; i < keys.length; i++) {
                 for (let j = i + 1; j < keys.length; j++) {
                     const u = keys[i];
@@ -148,7 +147,6 @@ export function TableTab({ onHighlight }: TableTabProps) {
         const visited = new Set<string>();
         const clusters: string[][] = [];
 
-        // Find connected components
         adjacency.forEach((_, startNode) => {
             if (visited.has(startNode)) return;
 
@@ -170,14 +168,15 @@ export function TableTab({ onHighlight }: TableTabProps) {
                     });
                 }
             }
-            clusters.push(component.sort()); 
+            // Sort by Extraction/Discovery Order instead of Alphabetical
+            clusters.push(component.sort((a, b) => {
+                const orderA = keyDiscoveryOrder.get(a) ?? Number.MAX_SAFE_INTEGER;
+                const orderB = keyDiscoveryOrder.get(b) ?? Number.MAX_SAFE_INTEGER;
+                return orderA - orderB;
+            })); 
         });
 
         // --- Step 5: Assign Rows to Clusters ---
-        // A row belongs to a cluster if ANY of its keys are in that cluster.
-        // Since clusters are disjoint (by definition of connected components), a row maps to exactly one cluster.
-        // (Unless a row bridges two clusters, but then they would have been one component).
-        
         const finalGroups: TableGroup[] = clusters.map((cols, idx) => ({
             id: `table-${idx}`,
             columns: cols,
@@ -188,7 +187,6 @@ export function TableTab({ onHighlight }: TableTabProps) {
             const rowKeys = Object.keys(row.data);
             if (rowKeys.length === 0) return; 
 
-            // Find matching cluster
             const targetGroup = finalGroups.find(g => 
                 rowKeys.some(k => g.columns.includes(k))
             );
@@ -196,11 +194,6 @@ export function TableTab({ onHighlight }: TableTabProps) {
             if (targetGroup) {
                 targetGroup.rows.push(row);
             } else {
-                // Should theoretically involve rows with keys that were not "potentialTableKeys"?
-                // But we used tableRowsPlaceholder to build the graph, so keys SHOULD be there.
-                // UNLESS potentialTableKeys logic excluded some unique keys that we still allowed pass?
-                // Logic: "rowKeys.forEach(k => potentialTableKeys.add(k))" ensures ALL keys of a table row are in the set.
-                // So this branch should be unreachable.
                 console.warn("[TableTab] Orphan row found:", row);
             }
         });
