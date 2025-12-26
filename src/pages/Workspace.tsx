@@ -1,19 +1,20 @@
 import DocumentViewer, { guessFileType } from "@/components/DocumentViewer";
 import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { ComparisonTab } from "@/components/workspace/ComparisonTab";
 import { ExtractedTextPanel } from "@/components/workspace/ExtractedTextPanel";
 import { PDFViewerWrapper } from "@/components/workspace/PDFViewerWrapper";
 import { ResultTab } from "@/components/workspace/ResultTab";
+import { TableTab } from "@/components/workspace/TableTab";
 import { TwoPaneLayout } from "@/components/workspace/TwoPaneLayout";
 import { useComparisonContext } from "@/context/ComparisonContext";
 import { useDocumentContext } from "@/context/DocumentContext";
@@ -22,18 +23,20 @@ import { cn } from "@/lib/utils";
 import { BoundingBox, LayoutText } from "@/types/document";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-    CheckCircle2, FileText, GitCompare, Maximize2,
-    Minimize2,
-    Search,
-    X
+  CheckCircle2, FileText, GitCompare, Maximize2,
+  Minimize2,
+  Search,
+  Table,
+  X
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
-type TabType = "text" | "compare" | "result";
+type TabType = "text" | "compare" | "result" | "table";
 
 const tabs: { id: TabType; label: string; icon: typeof FileText }[] = [
   { id: "result", label: "Result", icon: CheckCircle2 },
+  { id: "table", label: "Table", icon: Table },
   { id: "compare", label: "Compare Models", icon: GitCompare },
   { id: "text", label: "Raw Text", icon: FileText },
 ];
@@ -646,6 +649,8 @@ export default function Workspace() {
 
       case "result":
         return <ResultTab whisperHash={whisperHash} onHighlight={(lines) => handleStructuredHighlight(lines, true)} onRequestCompare={() => setActiveTab("compare")} />;
+      case "table":
+        return <TableTab onHighlight={(lines) => handleStructuredHighlight(lines, true)} />;
       case "compare":
         return <ComparisonTab whisperHash={whisperHash} onHighlight={(lines) => handleStructuredHighlight(lines, true)} />;
     }
