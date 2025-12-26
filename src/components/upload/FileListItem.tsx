@@ -1,8 +1,8 @@
-import { forwardRef } from "react";
-import { motion } from "framer-motion";
-import { FileText, X, Check, Loader2, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { UploadFile } from "@/types/document";
+import { motion } from "framer-motion";
+import { AlertCircle, Check, FileText, Loader2, X } from "lucide-react";
+import { forwardRef } from "react";
 import { ProgressBar } from "./ProgressBar";
 
 interface FileListItemProps {
@@ -13,7 +13,7 @@ interface FileListItemProps {
 const statusConfig = {
   pending: { icon: FileText, color: "text-muted-foreground", label: "Pending" },
   uploading: { icon: Loader2, color: "text-primary", label: "Uploading" },
-  processing: { icon: Loader2, color: "text-secondary", label: "Processing" },
+  processing: { icon: Loader2, color: "text-[hsl(var(--color-processing))]", label: "Processing" },
   complete: { icon: Check, color: "text-green-400", label: "Complete" },
   error: { icon: AlertCircle, color: "text-destructive", label: "Error" },
 };

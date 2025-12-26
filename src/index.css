@@ -71,6 +71,10 @@
     --glow-secondary: 221 83% 53%;
     /* Blue */
 
+    /* Processing Status Color */
+    --color-processing: 262 83% 58%;
+    /* Violet */
+
     /* Highlight Overlay Color - Fixed Clean Pink (More Visible) */
     --highlight-overlay: 349 100% 85%;
     /* #ffb3c1 - Darker/Brighter for visibility */
@@ -126,6 +130,10 @@
     --glow-primary: 185 80% 55%;
     --glow-secondary: 260 60% 55%;
     --surface-elevated: 222 40% 12%;
+
+    /* Processing Status Color */
+    --color-processing: 260 60% 55%;
+    /* Purple */
 
     /* Highlight Overlay Color - Matches Light Theme (Clean Pink) */
     --highlight-overlay: 349 100% 85%;

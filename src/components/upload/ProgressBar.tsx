@@ -1,6 +1,6 @@
-import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { UploadFile } from "@/types/document";
+import { motion } from "framer-motion";
 
 interface ProgressBarProps {
   progress: number;
@@ -11,7 +11,7 @@ export function ProgressBar({ progress, status }: ProgressBarProps) {
   const colorMap = {
     pending: "bg-muted",
     uploading: "bg-gradient-to-r from-primary to-primary/70",
-    processing: "bg-gradient-to-r from-secondary to-secondary/70",
+    processing: "bg-gradient-to-r from-[hsl(var(--color-processing))] to-[hsl(var(--color-processing)/0.7)]",
     complete: "bg-green-500",
     error: "bg-destructive",
   };
