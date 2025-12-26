@@ -114,10 +114,10 @@ function ComparisonCell({
                     className="flex w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 min-h-[60px]"
                 />
                 <div className="flex gap-2 justify-end">
-                     <Button size="icon" variant="ghost" className="h-6 w-6 text-green-600 hover:text-green-700 hover:bg-green-100" onClick={handleSave} title="Save">
+                     <Button size="icon" variant="ghost" className="h-6 w-6 text-green-600 hover:text-green-700 hover:bg-green-100 dark:hover:bg-green-900/40" onClick={handleSave} title="Save">
                         <Check className="w-4 h-4" />
                     </Button>
-                    <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive hover:text-destructive hover:bg-red-100" onClick={handleCancel} title="Cancel">
+                    <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive hover:text-destructive hover:bg-red-100 dark:hover:bg-red-900/40" onClick={handleCancel} title="Cancel">
                         <X className="w-4 h-4" />
                     </Button>
                 </div>
@@ -152,8 +152,8 @@ function ComparisonCell({
                     <span 
                         className={cn(
                             "break-words", 
-                            isApproved && "font-bold text-green-700",
-                            isWarning && !isApproved && "bg-yellow-100/50 text-yellow-900 px-1 rounded border border-yellow-200"
+                            isApproved && "font-bold text-green-700 dark:text-green-400",
+                            isWarning && !isApproved && "bg-yellow-100/50 dark:bg-yellow-900/20 text-yellow-900 dark:text-yellow-300 px-1 rounded border border-yellow-200 dark:border-yellow-800"
                         )}
                         title={isWarning ? verificationReason : undefined}
                     >
@@ -519,34 +519,49 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
                 <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2 bg-muted/50 p-1 rounded-md border text-xs">
                         <Button 
-                            variant={filter === "all" ? "secondary" : "ghost"} 
+                            variant="ghost" 
                             size="sm" 
                             onClick={() => setFilter("all")}
-                            className="h-7"
+                            className={cn("h-7", filter === "all" && "bg-secondary text-secondary-foreground shadow-sm")}
                         >
                             Show All
                         </Button>
                         <Button 
-                            variant={filter === "mismatch" ? "secondary" : "ghost"} 
+                            variant="ghost" 
                             size="sm" 
                             onClick={() => setFilter("mismatch")}
-                            className="h-7 text-destructive hover:text-destructive"
+                            className={cn(
+                                "h-7 transition-colors",
+                                filter === "mismatch" 
+                                    ? "bg-destructive/10 text-destructive dark:bg-red-900/20 dark:text-red-400 shadow-sm" 
+                                    : "text-destructive hover:text-destructive hover:bg-destructive/10"
+                            )}
                         >
                             Mismatches Only
                         </Button>
                         <Button 
-                            variant={filter === "match" ? "secondary" : "ghost"} 
+                            variant="ghost" 
                             size="sm" 
                             onClick={() => setFilter("match")}
-                            className="h-7 text-green-600 hover:text-green-700"
+                            className={cn(
+                                "h-7 transition-colors",
+                                filter === "match" 
+                                    ? "bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400 shadow-sm" 
+                                    : "text-green-600 hover:text-green-700 hover:bg-green-100/50"
+                            )}
                         >
                             Matches Only
                         </Button>
                         <Button 
-                            variant={filter === "warning" ? "secondary" : "ghost"} 
+                            variant="ghost" 
                             size="sm" 
                             onClick={() => setFilter("warning")}
-                            className="h-7 text-yellow-600 hover:text-yellow-700"
+                            className={cn(
+                                "h-7 transition-colors",
+                                filter === "warning" 
+                                    ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400 shadow-sm" 
+                                    : "text-yellow-600 hover:text-yellow-700 hover:bg-yellow-100/50"
+                            )}
                         >
                             Suspicious
                         </Button>
@@ -681,8 +696,8 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
                                            isNarrow ? "grid-cols-1 divide-y" : "grid-cols-2 divide-x",
                                            !isSelected && "hover:bg-muted/30 border-border",
                                            isSelected ? "bg-accent/50 border-primary ring-1 ring-primary/20" : "",
-                                           !row.isMatch && !isSelected && "border-destructive/20 bg-destructive/5",
-                                           row.tier === "warning" && !isSelected && "border-yellow-200 bg-yellow-50/50" // Warning style
+                                           !row.isMatch && !isSelected && "border-destructive/20 dark:border-red-900/50 bg-destructive/5 dark:bg-red-900/10",
+                                           row.tier === "warning" && !isSelected && "border-yellow-200 dark:border-yellow-800 bg-yellow-50/50 dark:bg-yellow-900/10" // Warning style
                                        )}
                                      >
                                         {/* Model A Cell */}

@@ -164,7 +164,7 @@ export function TableTab({ onHighlight }: TableTabProps) {
                                             key={`${row.lineNumber}-${key}`}
                                             className={cn(
                                                 "cursor-pointer hover:border-primary/50 transition-all hover:shadow-sm group",
-                                                cell.isApproved && "bg-green-50/50 border-green-200"
+                                                cell.isApproved && "bg-green-50/50 dark:bg-green-900/20 border-green-200 dark:border-green-800"
                                             )}
                                             onClick={() => onHighlight?.(cell.lineNumbers)}
                                         >
@@ -236,7 +236,7 @@ export function TableTab({ onHighlight }: TableTabProps) {
                                                                 className={cn(
                                                                     "py-2 h-auto text-sm cursor-pointer border-l first:border-l-0 border-dashed border-border/50",
                                                                     !cell && "bg-muted/5", // Empty cell
-                                                                    cell?.isApproved && "bg-green-50/30 text-green-900 font-medium",
+                                                                    cell?.isApproved && "bg-green-50/30 dark:bg-green-900/20 text-green-900 dark:text-green-300 font-medium",
                                                                     "hover:bg-primary/5 transition-colors relative"
                                                                 )}
                                                                 onClick={() => cell && onHighlight?.(cell.lineNumbers)}

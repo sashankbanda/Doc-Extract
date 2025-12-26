@@ -323,26 +323,36 @@ export function ResultTab({ whisperHash: targetHash, onHighlight, onRequestCompa
                 <div className="flex items-center gap-2">
                     <div className="flex items-center space-x-2 bg-muted/50 p-1 rounded-md border text-xs">
                         <Button 
-                            variant={resultFilter === "all" ? "secondary" : "ghost"} 
+                            variant="ghost" 
                             size="sm" 
                             onClick={() => setResultFilter("all")}
-                            className="h-7"
+                            className={cn("h-7", resultFilter === "all" && "bg-secondary text-secondary-foreground shadow-sm")}
                         >
                             All
                         </Button>
                         <Button 
-                            variant={resultFilter === "approved" ? "secondary" : "ghost"} 
+                            variant="ghost" 
                             size="sm" 
                             onClick={() => setResultFilter("approved")}
-                            className="h-7 text-green-600 hover:text-green-700"
+                            className={cn(
+                                "h-7 transition-colors",
+                                resultFilter === "approved" 
+                                    ? "bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400 shadow-sm" 
+                                    : "text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 hover:bg-green-100/50"
+                            )}
                         >
                             Approved
                         </Button>
                         <Button 
-                            variant={resultFilter === "review" ? "secondary" : "ghost"} 
+                            variant="ghost" 
                             size="sm" 
                             onClick={() => setResultFilter("review")}
-                            className="h-7 text-destructive hover:text-destructive"
+                            className={cn(
+                                "h-7 transition-colors",
+                                resultFilter === "review" 
+                                    ? "bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400 shadow-sm" 
+                                    : "text-destructive hover:text-destructive hover:bg-red-100/50"
+                            )}
                         >
                             Review
                         </Button>
@@ -545,8 +555,8 @@ export function ResultTab({ whisperHash: targetHash, onHighlight, onRequestCompa
                                             id={`result-row-${i}`}
                                             className={cn(
                                                 "cursor-pointer transition-colors border-l-4 border-l-transparent",
-                                                isMiss && "text-muted-foreground italic bg-destructive/5",
-                                                isApproved && "bg-green-50/50",
+                                                isMiss && "text-muted-foreground italic bg-destructive/5 dark:bg-red-900/10",
+                                                isApproved && "bg-green-50/50 dark:bg-green-900/20",
                                                 isSelected && "bg-accent border-l-primary ring-1 ring-inset ring-primary/20",
                                                 !isSelected && "hover:bg-muted/50"
                                             )}
@@ -565,9 +575,9 @@ export function ResultTab({ whisperHash: targetHash, onHighlight, onRequestCompa
                                         >
                                             <TableCell className="font-medium align-top">
                                                 {row.key}
-                                                {isApproved && <span className="ml-2 text-green-600 text-[10px] uppercase border border-green-200 px-1 rounded bg-green-50">Approved</span>}
+                                                {isApproved && <span className="ml-2 text-green-600 dark:text-green-400 text-[10px] uppercase border border-green-200 dark:border-green-800 px-1 rounded bg-green-50 dark:bg-green-900/40">Approved</span>}
                                             </TableCell>
-                                            <TableCell className={cn("align-top whitespace-pre-wrap break-words min-w-0", isApproved && "font-medium text-green-900")}>
+                                            <TableCell className={cn("align-top whitespace-pre-wrap break-words min-w-0", isApproved && "font-medium text-green-900 dark:text-green-300")}>
                                                 {displayValue}
                                             </TableCell>
                                              <TableCell className="align-top text-right text-xs text-muted-foreground w-[50px]">
