@@ -436,7 +436,7 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
             onHighlight?.(linesToHighlight || []);
             
             // Scroll into view
-            const element = document.getElementById(`row-${selectedPanel.toLowerCase()}-${selectedRow}`);
+            const element = document.getElementById(`row-unified-${selectedRow}`);
             element?.scrollIntoView({ behavior: 'auto', block: 'nearest' });
             
             // Update last processed selection
