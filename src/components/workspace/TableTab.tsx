@@ -15,6 +15,7 @@ import { useMemo } from "react";
 
 interface TableTabProps {
     onHighlight?: (lines: number[]) => void;
+    onRequestCompare?: () => void;
 }
 
 interface ProcessedRow {
@@ -37,8 +38,8 @@ interface TableGroup {
     rows: ProcessedRow[];
 }
 
-export function TableTab({ onHighlight }: TableTabProps) {
-    const { comparisonRows, approvedItems } = useComparisonContext();
+export function TableTab({ onHighlight, onRequestCompare }: TableTabProps) {
+    const { comparisonRows, approvedItems, setFocusKey } = useComparisonContext();
 
     // 1. Group Data by Line Number and Split into Tables
     const { tableGroups, infoRows } = useMemo(() => {
@@ -304,19 +305,34 @@ export function TableTab({ onHighlight }: TableTabProps) {
                                                     {/* Data Cells */}
                                                     {group.columns.map(col => {
                                                         const cell = row.data[col];
+                                                        // CHANGED: Only true if cell exists AND value is explicit null string
+                                                        const isExplicitNull = cell && (cell.value === "null" || cell.value === "undefined");
+                                                        
                                                         return (
                                                             <TableCell 
                                                                 key={col} 
                                                                 className={cn(
                                                                     "py-2 h-auto text-sm cursor-pointer border-l first:border-l-0 border-dashed border-border/50",
-                                                                    !cell && "bg-muted/5", // Empty cell
+                                                                    // CHANGED: Only style if explicit null
+                                                                    isExplicitNull && "bg-destructive/5 dark:bg-red-900/10 text-destructive italic",
                                                                     cell?.isApproved && "bg-green-50/30 dark:bg-green-900/20 text-green-900 dark:text-green-300 font-medium",
                                                                     "hover:bg-primary/5 transition-colors relative"
                                                                 )}
-                                                                onClick={() => cell && onHighlight?.(cell.lineNumbers)}
+                                                                onClick={() => {
+                                                                    // If null, try to navigate to compare tab
+                                                                    if (isExplicitNull && onRequestCompare) {
+                                                                        if (cell?.originalKey) {
+                                                                            setFocusKey(cell.originalKey);
+                                                                            onRequestCompare();
+                                                                        } 
+                                                                        return;
+                                                                    }
+                                                                    
+                                                                    cell && onHighlight?.(cell.lineNumbers);
+                                                                }}
                                                             >
                                                                 {cell ? (
-                                                                    <span className={cn(cell.value === "null" && "text-muted-foreground/40 italic")}>
+                                                                    <span className={cn(cell.value === "null" && "opacity-70")}>
                                                                         {cell.value}
                                                                     </span>
                                                                 ) : (
