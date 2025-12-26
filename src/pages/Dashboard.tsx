@@ -1,9 +1,20 @@
 
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { CheckCircle, Clock, FileText } from "lucide-react";
+import { useDocumentContext } from "@/context/DocumentContext";
+import { CheckCircle, Clock, FileText, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -29,8 +40,11 @@ interface DashboardData {
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { documents, removeDocument } = useDocumentContext();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [fileToDelete, setFileToDelete] = useState<{id: string, name: string} | null>(null);
 
   useEffect(() => {
     fetchDashboardData();
@@ -62,6 +76,34 @@ export default function Dashboard() {
       // fast text match for pending or anything else
       case "pending": return "bg-red-100 text-red-800 hover:bg-red-200 border-red-200 border"; 
       default: return "bg-red-100 text-red-800 hover:bg-red-200 border-red-200 border";
+    }
+  };
+
+  const handleDeleteClick = (file: FileItem) => {
+    setFileToDelete({ id: file.hash, name: file.filename });
+    setDeleteOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!fileToDelete) return;
+    try {
+        // 1. Delete from Backend
+        await fetch(`http://localhost:8005/dashboard/files/${fileToDelete.id}`, { method: 'DELETE' });
+        
+        // 2. Delete from Client Context (Syncs dropdowns/workspace)
+        // Find document by whisperHash (which is fileToDelete.id)
+        const docToRemove = documents.find(d => d.whisperHash === fileToDelete.id);
+        if (docToRemove) {
+            removeDocument(docToRemove.id);
+        }
+
+        // 3. Refresh Dashboard Data
+        fetchDashboardData();
+    } catch (e) {
+        console.error("Failed to delete file", e);
+    } finally {
+        setDeleteOpen(false);
+        setFileToDelete(null);
     }
   };
 
@@ -154,6 +196,9 @@ export default function Dashboard() {
                    <Button variant="secondary" size="sm" onClick={() => handleView(file.hash, file.filename)}>
                        Open
                    </Button>
+                   <Button variant="ghost" size="icon" className="hover:text-destructive hover:bg-destructive/10" onClick={() => handleDeleteClick(file)}>
+                       <Trash2 className="w-4 h-4" />
+                   </Button>
                 </TableCell>
               </TableRow>
             ))}
@@ -167,6 +212,23 @@ export default function Dashboard() {
           </TableBody>
         </Table>
       </div>
+      
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete File</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{fileToDelete?.name}"? This action cannot be undone and will remove the file from your dashboard.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+             <AlertDialogCancel>Cancel</AlertDialogCancel>
+             <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+               Delete
+             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -26,3 +26,16 @@ async def update_file_status(update: StatusUpdate):
         return {"message": "Status updated successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/files/{whisper_hash}")
+async def delete_dashboard_file(whisper_hash: str):
+    """Delete a file from the dashboard."""
+    try:
+        success = dashboard_service.delete_file(whisper_hash)
+        if not success:
+            raise HTTPException(status_code=404, detail="File not found")
+        return {"message": "File deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

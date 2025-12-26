@@ -58,6 +58,16 @@ class DashboardService:
         
         self._save_registry(registry)
 
+    def delete_file(self, whisper_hash: str):
+        """Remove a file from the dashboard registry."""
+        registry = self._load_registry()
+        
+        if whisper_hash in registry:
+            del registry[whisper_hash]
+            self._save_registry(registry)
+            return True
+        return False
+
     def get_dashboard_data(self) -> Dict[str, Any]:
         """
         Get all files with their status and stats.
