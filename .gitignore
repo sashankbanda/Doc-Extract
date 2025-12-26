@@ -72,3 +72,24 @@ backend/.env
 
 backend/Api_keys
 Api_keys
+
+# unused files
+src/components/DocumentWorkspace.tsx
+src/components/UploadAndProcess.tsx
+src/components/TextPanel.tsx
+src/components/workspace/StructuredTablePanel.tsx
+src/components/workspace/TemplateFieldsPanel.tsx
+src/components/NavLink.tsx
+src/utils/api.ts
+src/components/ui/sidebar.tsx
+backend/routes/webhook.py
+backend/services/grouping_service.py
+backend/services/normalization_service.py
+backend/services/metadata_service.py
+backend/services/structured_organizer.py
+backend/services/README_DEPRECATED.md
+extract_colors.py
+architecture_raw_high.md
+UNUSED_FILES.md
+backend/ST_TABLE_DEBUGGING.md
+.rohkun/
