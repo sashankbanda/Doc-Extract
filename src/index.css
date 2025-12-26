@@ -71,12 +71,11 @@
     --glow-secondary: 221 83% 53%;
     /* Blue */
 
-    --surface-elevated: 0 0% 100%;
-
-    /* Highlight Overlay Color */
-    --highlight-overlay: 262 83% 58%;
-    /* Violet highlight */
-    --highlight-border: 262 83% 58%;
+    /* Highlight Overlay Color - Fixed Clean Pink (More Visible) */
+    --highlight-overlay: 349 100% 85%;
+    /* #ffb3c1 - Darker/Brighter for visibility */
+    --highlight-border: 0 0% 0% 0;
+    /* Transparent - No Stroke */
   }
 
   .dark {
@@ -128,9 +127,10 @@
     --glow-secondary: 260 60% 55%;
     --surface-elevated: 222 40% 12%;
 
-    /* Highlight Overlay Color - Dark Theme: Matches Primary (Cyan) */
-    --highlight-overlay: 185 80% 55%;
-    --highlight-border: 185 80% 55%;
+    /* Highlight Overlay Color - Matches Light Theme (Clean Pink) */
+    --highlight-overlay: 349 100% 85%;
+    --highlight-border: 0 0% 0% 0;
+    /* Transparent */
   }
 }
 

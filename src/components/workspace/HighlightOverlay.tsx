@@ -29,7 +29,7 @@ export function HighlightOverlay({
             top: highlight.y * canvasHeight,
             width: highlight.width * canvasWidth,
             height: highlight.height * canvasHeight,
-            backgroundColor: "hsl(var(--highlight-overlay) / 0.3)",
+            backgroundColor: "hsl(var(--highlight-overlay) / 0.35)",
           }}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -71,10 +71,9 @@ export function HighlightOverlay({
             />
             {/* Inner highlight */}
             <div 
-              className="absolute inset-0 rounded-sm border-2" 
+              className="absolute inset-0 rounded-sm" 
               style={{
-                backgroundColor: "hsl(var(--highlight-overlay) / 0.4)",
-                borderColor: "hsl(var(--highlight-overlay))", 
+                backgroundColor: "hsl(var(--highlight-overlay) / 0.45)",
               }}
             />
           </motion.div>

@@ -1,8 +1,7 @@
-import { useCallback, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { Upload, FileText, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { UploadFile } from "@/types/document";
+import { AnimatePresence, motion } from "framer-motion";
+import { FileText, Upload } from "lucide-react";
+import { useCallback, useState } from "react";
 
 interface FileDropzoneProps {
   onFilesAdded: (files: File[]) => void;
@@ -96,7 +95,7 @@ export function FileDropzone({ onFilesAdded, disabled }: FileDropzoneProps) {
         "flex flex-col items-center justify-center p-12 text-center",
         isDragOver
           ? "border-primary bg-primary/5 glow-primary-subtle"
-          : "border-border hover:border-primary/50 hover:bg-muted/30",
+          : "border-input hover:border-primary/50 hover:bg-muted/30",
         disabled && "opacity-50 cursor-not-allowed"
       )}
       onDragOver={handleDragOver}
