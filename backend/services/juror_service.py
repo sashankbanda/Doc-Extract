@@ -3,6 +3,7 @@ import logging
 from typing import Dict, List, Optional, Any
 import litellm
 import asyncio
+import re
 
 from backend.config import config
 from backend.services.key_manager import key_manager

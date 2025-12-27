@@ -50,7 +50,9 @@ function ComparisonCell({
     isApproved,
     onApprove, 
     onUpdate,
-    loading 
+
+    loading,
+    confidence
 }: {
     model: 'A' | 'B';
     index?: number;
@@ -65,6 +67,7 @@ function ComparisonCell({
     onApprove: (key: string, val: string) => void;
     onUpdate: (model: 'A' | 'B', index: number, k: string, v: string) => void;
     loading?: boolean;
+    confidence?: number | null;
 }) {
     const [isEditing, setIsEditing] = useState(false);
     const [editKey, setEditKey] = useState(rawKey);
@@ -163,6 +166,20 @@ function ComparisonCell({
                     </span>
                 )}
             </div>
+            
+
+
+            {/* Confidence Badge */}
+            {confidence !== null && confidence !== undefined && !isEditing && (
+                <div className={cn(
+                    "absolute right-1 bottom-1 text-[9px] px-1 rounded border opacity-60 hover:opacity-100 transition-opacity cursor-help font-mono",
+                    confidence >= 90 ? "bg-green-100 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800" :
+                    confidence >= 70 ? "bg-yellow-100 text-yellow-700 border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-400 dark:border-yellow-800" :
+                    "bg-red-100 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800"
+                )} title={`Confidence: ${confidence}%`}>
+                    {confidence}%
+                </div>
+            )}
             
             {/* Actions (Visible on hover) */}
             <div className="absolute right-0 top-0 hidden group-hover:flex items-center bg-background/80 backdrop-blur-sm rounded-md shadow-sm border">
@@ -722,6 +739,7 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
                                                 onApprove={approveItem}
                                                 onUpdate={(m, i, k, v) => updateItem(m, i, k, v, row.indexB)}
                                                 loading={safeLoadingA}
+                                                confidence={row.itemA?.confidence}
                                             />
                                         </div>
 
@@ -757,6 +775,8 @@ export function ComparisonTab({ whisperHash, onHighlight }: ComparisonTabProps &
                                                 onApprove={approveItem}
                                                 onUpdate={(m, i, k, v) => updateItem(m, i, k, v, row.indexA)}
                                                 loading={safeLoadingB}
+                                                // @ts-ignore
+                                                confidence={row.itemB?.confidence}
                                             />
                                         </div>
                                      </div>

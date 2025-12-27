@@ -12,11 +12,11 @@ type HighlightHandler = (lineIds: number[], isFirstLine: boolean) => void;
 
 export interface StructuredDataViewerProps {
   sections: {
-    Claims?: Array<Record<string, Array<{ value: string; line_numbers: number[] }>>>;
-    "Policy Info"?: Record<string, Array<{ value: string; line_numbers: number[] }>>;
-    Summary?: Record<string, Array<{ value: string; line_numbers: number[] }>>;
-    "Report Info"?: Record<string, Array<{ value: string; line_numbers: number[] }>>;
-    Other?: Record<string, Array<{ value: string; line_numbers: number[] }>>;
+    Claims?: Array<Record<string, Array<{ value: string; line_numbers: number[]; confidence?: number }>>>;
+    "Policy Info"?: Record<string, Array<{ value: string; line_numbers: number[]; confidence?: number }>>;
+    Summary?: Record<string, Array<{ value: string; line_numbers: number[]; confidence?: number }>>;
+    "Report Info"?: Record<string, Array<{ value: string; line_numbers: number[]; confidence?: number }>>;
+    Other?: Record<string, Array<{ value: string; line_numbers: number[]; confidence?: number }>>;
   };
   skipped_items?: Array<{
     source_key: string;
@@ -38,7 +38,10 @@ export interface StructuredDataViewerProps {
     canonical_name?: string | null;
     value: string;
     line_numbers: number[];
+    value: string;
+    line_numbers: number[];
     semantic_type: string;
+    confidence?: number;
   }>;
 }
 
@@ -244,7 +247,7 @@ const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({
             const hasFields = claimKeys.some(key => claim[key] && claim[key].length > 0);
 
             // Group fields by category for nested accordions
-            const fieldsByCategory: Record<string, Array<{ key: string; values: Array<{ value: string; line_numbers: number[] }> }>> = {
+            const fieldsByCategory: Record<string, Array<{ key: string; values: Array<{ value: string; line_numbers: number[]; confidence?: number }> }>> = {
               Dates: [],
               Financials: [],
               Parties: [],
@@ -259,7 +262,7 @@ const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({
               const category = classifyFieldKey(key);
               fieldsByCategory[category].push({
                 key,
-                values: valueList,
+                values: valueList as any, // Cast to any or fix Section type
               });
             }
 
@@ -303,6 +306,8 @@ const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({
                                 onHighlight={() => onHighlight(item.line_numbers, true)}
                                 lineNumbers={item.line_numbers}
                                 showLineNumbers={true}
+                                // @ts-ignore
+                                confidence={item.confidence}
                               />
                             </div>
                           ))}
@@ -373,9 +378,15 @@ const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({
                                             <HighlightValue
                                               lineNumbers={item.line_numbers}
                                               onHighlight={onHighlight}
+                                              onHighlight={onHighlight}
                                               showLineNumbers={true}
                                             >
                                               {item.value}
+                                              {item.confidence !== undefined && (
+                                                <span className="ml-1 text-[9px] text-muted-foreground opacity-70">
+                                                  ({item.confidence}%)
+                                                </span>
+                                              )}
                                             </HighlightValue>
                                           </div>
                                         );
@@ -497,7 +508,7 @@ const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({
     const fieldKeys = Object.keys(fields);
 
     // Group fields by visual category (for readability only, no data loss)
-    const groupedFields: Record<string, Array<{ key: string; values: Array<{ value: string; line_numbers: number[] }> }>> = {
+    const groupedFields: Record<string, Array<{ key: string; values: Array<{ value: string; line_numbers: number[]; confidence?: number }> }>> = {
       Dates: [],
       Amounts: [],
       Names: [],
@@ -548,7 +559,7 @@ const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({
 
       groupedFields[category].push({
         key,
-        values: valueList,
+        values: valueList as any,
       });
     }
 
@@ -621,6 +632,7 @@ const StructuredDataViewer: React.FC<StructuredDataViewerProps> = ({
                                     onHighlight={() => onHighlight(item.line_numbers, true)}
                                     lineNumbers={item.line_numbers}
                                     showLineNumbers={true}
+                                confidence={item.confidence}
                                   />
                                 </div>
                               );

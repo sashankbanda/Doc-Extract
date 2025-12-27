@@ -12,6 +12,7 @@ interface EditableValueProps {
   lineNumbers?: number[];
   showLineNumbers?: boolean;
   className?: string;
+  confidence?: number;
 }
 
 export const EditableValue: React.FC<EditableValueProps> = ({
@@ -22,6 +23,7 @@ export const EditableValue: React.FC<EditableValueProps> = ({
   lineNumbers = [],
   showLineNumbers = false,
   className,
+  confidence,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [localValue, setLocalValue] = useState(value);
@@ -112,6 +114,17 @@ export const EditableValue: React.FC<EditableValueProps> = ({
         )}
         {value ?? "—"}
         </span>
+
+        {confidence !== undefined && confidence !== null && (
+            <span className={cn(
+                "text-[9px] px-1 rounded border opacity-60 font-mono pointer-events-none",
+                confidence >= 90 ? "bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800" :
+                confidence >= 70 ? "bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-400 dark:border-yellow-800" :
+                "bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800"
+            )} title={`Confidence: ${confidence}%`}>
+                {confidence}%
+            </span>
+        )}
         
         {onSave && (
             <Button

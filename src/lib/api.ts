@@ -117,6 +117,7 @@ export interface StructuredItem {
         status: "verified" | "suspicious" | "unverified";
         reason?: string;
     };
+    confidence?: number;
 }
 
 // Backend response: flat array of items

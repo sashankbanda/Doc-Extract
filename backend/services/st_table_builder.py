@@ -85,6 +85,7 @@ def _empty_field(canonical_name: str) -> Dict[str, Any]:
       "value": "",
       "line_numbers": [],
       "semantic_type": "",
+      "confidence": None,
     }
 
 
@@ -147,6 +148,7 @@ def _assign_field_to_row(row: Dict[str, Any], base_key: str, item: Dict[str, Any
           "value": item.get("value", ""),
           "line_numbers": item.get("line_numbers") or [],
           "semantic_type": item.get("semantic_type", ""),
+          "confidence": item.get("confidence"),
         }
         return
 
@@ -162,6 +164,7 @@ def _assign_field_to_row(row: Dict[str, Any], base_key: str, item: Dict[str, Any
                   "value": item.get("value", ""),
                   "line_numbers": item.get("line_numbers") or [],
                   "semantic_type": item.get("semantic_type", ""),
+                  "confidence": item.get("confidence"),
                 }
                 return
 

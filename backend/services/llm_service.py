@@ -4,6 +4,7 @@ import os
 from typing import Any, Dict, List, Optional, Union
 
 import litellm
+import difflib
 
 from backend.config import config
 from backend.services.semantic_tagger import semantic_tagger
@@ -333,12 +334,14 @@ class LLMService:
             "    {\n"
             '      "source_key": "Claimant Name",\n'
             '      "value": "SYDIA",\n'
-            '      "line_numbers": [15, 16, 17]\n'
+            '      "line_numbers": [15, 16, 17],\n'
+            '      "confidence": 98\n'
             "    },\n"
             "    {\n"
             '      "source_key": "Claim Number",\n'
-            '      "value": "12345",\n'
-            '      "line_numbers": [12]\n'
+            '      "value": "123456",\n'
+            '      "line_numbers": [12],\n'
+            '      "confidence": 85\n'
             "    }\n"
             "  ]\n"
             "}\n\n"
@@ -348,6 +351,7 @@ class LLMService:
             "- `source_key` = exact label as it appears in document (use the original field name as seen)\n"
             "- `value` = exact value as it appears (no transformation)\n"
             "- `line_numbers` = array of integers matching [NN] markers exactly\n"
+            "- `confidence` = integer 0-100 representing your confidence that this key-value pair is correct\n"
             "- If a value exists, it MUST have line_numbers\n"
             "- If line_numbers are unclear → skip the item (do NOT guess)\n"
             "- Keep strictly to JSON. Do not add comments or extra keys.\n"
@@ -451,11 +455,22 @@ class LLMService:
             canonical_name = find_canonical_name(source_key) if source_key else None
             
             # Add item (preserved even if key/value/line_numbers are empty)
+            # EXTRACT CONFIDENCE
+            confidence = item.get("confidence")
+            if confidence is not None:
+                try:
+                    confidence = int(confidence)
+                except (ValueError, TypeError):
+                    confidence = 0 # Default to 0 if invalid
+            else:
+                confidence = 0 # Default if missing
+                
             items.append({
                 "source_key": source_key if source_key else "(no key)",
                 "canonical_name": canonical_name,
                 "value": value if value else "(no value)",
-                "line_numbers": sorted(list(set(line_numbers))) if line_numbers else []  # Deduplicate and sort
+                "line_numbers": sorted(list(set(line_numbers))) if line_numbers else [],  # Deduplicate and sort
+                "confidence": confidence
             })
         
         # No items are skipped - all items are preserved (data loss prevention)
@@ -508,6 +523,58 @@ class LLMService:
                  # Default verified for other fields (dates, amounts usually okay or strict regex)
                  item["verification_status"] = {"status": "verified", "reason": "Low-risk field"}
             
+            # --- CONFIDENCE HEURISTICS ---
+            # Adjust confidence based on objective signals
+            # --- CONFIDENCE HEURISTICS ---
+            # Adjust confidence based on objective signals
+            # NEW: Calculate Ground Truth Confidence
+            
+            # Get text at line numbers
+            line_nums = item.get("line_numbers", [])
+            source_context = ""
+            if line_nums:
+                # We strictly want the text AT these lines, not a buffer, 
+                # so we can compare exactly.
+                # Use helper but with buffer=0
+                source_context = self._get_context_for_items(line_nums, raw_lines, buffer=0).strip()
+            
+            # Calculate Verifiable Score
+            verifiable_conf = self._calculate_verifiable_confidence(item.get("value", ""), source_context)
+            
+            # Decide: Use Verifiable Score as the Primary Truth
+            # The LLM's self-reported confidence is often hallucinatory.
+            # However, if we have NO line numbers (conf=0), verifiable is also 0.
+            
+            item['confidence'] = verifiable_conf
+            
+            # Apply Penalties on top of Verifiable Score
+            
+            # 1. No Line Numbers Penalty (Severe)
+            if not line_nums:
+                item['confidence'] = 0
+            
+            # 2. Juror Verification Cap (only if we have lines)
+            elif item.get("verification_status", {}).get("status") == "suspicious":
+                 item['confidence'] = min(item['confidence'], 60)
+                 
+            # 3. Unknown Key / Hallucination Penalty
+            if not item.get("canonical_name"):
+                 # Key is not in our known schema
+                 item['confidence'] = max(0, item['confidence'] - 20)
+            
+            # 4. Key Proximity Check (Is the key actually near the value?)
+            if item.get("source_key") and item.get("source_key") != "(no key)" and line_nums:
+                # Get extended context (buffer=4 lines)
+                extended_context = self._get_context_for_items(line_nums, raw_lines, buffer=4)
+                
+                # Check if key is present nearby
+                norm_key = item['source_key'].lower().strip()
+                if norm_key not in extended_context.lower():
+                    # The key the LLM claims exists... isn't near the value.
+                    # Likely a hallucinated relationship or grabbed a key from far away.
+                    penalty = 40
+                    item['confidence'] = max(0, item['confidence'] - penalty)
+
             verified_items.append(item)
 
         return {
@@ -604,13 +671,59 @@ class LLMService:
             except ValueError:
                 pass
             # Try regular integer
-            try:
-                val = int(line_str)
-                return val if val >= 0 else None
-            except ValueError:
-                pass
+    def _calculate_verifiable_confidence(self, extracted_value: str, source_text: str) -> int:
+        """
+        Calculate a confidence score (0-100) based on how well the extracted value
+        matches the source text.
         
-        return None
+        Logic:
+        1. Normalize both strings (lower, strip).
+        2. Exact Match -> 100
+        3. Feature Containment:
+           - If extracted is substring of source -> High score (80-95 depending on coverage)
+        4. Reverse Containment (Hallucination check):
+           - If source is substring of extracted -> High Penalty (means LLM added text)
+        5. Fuzzy Match -> Base score
+        """
+        if not extracted_value or not source_text:
+            return 0
+            
+        norm_extracted = extracted_value.lower().strip()
+        norm_source = source_text.lower().strip()
+        
+        # 1. Exact Match
+        if norm_extracted == norm_source:
+            return 100
+            
+        # 2. Substring Check (Truncation?)
+        # Extracted is a part of Source (e.g. Source="Claim 12345", Extracted="12345") -> Good
+        if norm_extracted in norm_source:
+            # It is physically present on the line.
+            # Unless it's extremely short (like "a"), it's likely correct.
+            # We trust that the key-value mapping handled the "label" separation.
+            
+            if len(norm_extracted) < 3 and len(norm_source) > 10:
+                 return 80 # Very short snippet, might be coincidence
+                 
+            return 100 # It is in the text. Full marks.
+            
+        # 3. Reverse Check (Hallucination?)
+        # Source is part of Extracted (e.g. Source="Claim 123", Extracted="Claim 123 (Verified by AI)") -> Bad
+        if norm_source in norm_extracted:
+            # We don't want the AI adding commentary
+            # Penalize based on how much extra junk there is
+            inflation = len(norm_extracted) / len(norm_source)
+            if inflation < 1.1: return 85 # Minor diff
+            if inflation < 1.5: return 60 # Significant addition
+            return 30 # Huge addition
+            
+        # 4. Fuzzy Similarity (SequenceMatcher)
+        # Identify typos or minor OCR mismatches
+        matcher = difflib.SequenceMatcher(None, norm_extracted, norm_source)
+        similarity = matcher.ratio() # 0.0 to 1.0
+        
+        return int(similarity * 100)
+
 
 
 
@@ -661,6 +774,11 @@ class LLMService:
                     
                     # 2. Merge Line Numbers
                     last['line_numbers'] = sorted(list(set(last['line_numbers'] + item['line_numbers'])))
+                    
+                    # 3. Average Confidence (or take min? Average seems fair for split lines)
+                    conf1 = last.get('confidence', 0) or 0
+                    conf2 = item.get('confidence', 0) or 0
+                    last['confidence'] = int((conf1 + conf2) / 2)
                     
                     # Skip appending this item (it's fused)
                     continue

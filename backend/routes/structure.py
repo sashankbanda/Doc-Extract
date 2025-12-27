@@ -15,6 +15,7 @@ class StructuredItemUpdate(BaseModel):
     value: str
     line_numbers: List[int]
     semantic_type: str
+    confidence: Optional[int] = None
 
 
 class StructuredDataUpdate(BaseModel):

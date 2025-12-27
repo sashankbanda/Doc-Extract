@@ -18,6 +18,8 @@ export interface ComparisonRow {
     // Verification
     tier: "match" | "warning" | "mismatch";
     verificationReason?: string;
+    itemA?: StructuredItem;
+    itemB?: StructuredItem;
 }
 
 interface ComparisonContextType {
@@ -392,7 +394,9 @@ export function ComparisonProvider({ children }: { children: ReactNode }) {
                     lineNumbersB: linesB,
                     sortKey: minLine,
                     indexA: entryA?.originalIndex,
-                    indexB: entryB?.originalIndex
+                    indexB: entryB?.originalIndex,
+                    itemA: itemA,
+                    itemB: itemB
                 });
             }
         });

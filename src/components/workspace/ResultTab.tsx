@@ -547,6 +547,21 @@ export function ResultTab({ whisperHash: targetHash, onHighlight, onRequestCompa
                                         displayValue = row.valA;
                                     }
                                     
+                                    // Determine confidence to display
+                                    // If match, Model A confidence is usually representative? Or average?
+                                    // If approved, approvedItems is a simple map key->value without confidence stored.
+                                    // So we can fallback to the confidence of the model that produced the value if possible.
+                                    // But comparisonRows doesn't store confidence easily accessible in this loop without diving into itemA/B.
+                                    
+                                    // We need to access the underlying item confidence.
+                                    // Ideally, comparisonRows should expose it.
+                                    // For now, let's try to grab it from row.itemA or row.itemB
+                                    
+                                    let displayConf: number | undefined;
+                                    if (row.isMatch) displayConf = row.itemA?.confidence;
+                                    else if (approvedVal === row.valA) displayConf = row.itemA?.confidence;
+                                    else if (approvedVal === row.valB) displayConf = row.itemB?.confidence;
+                                    
                                     const isSelected = i === selectedIndex;
 
                                     return (
@@ -579,6 +594,16 @@ export function ResultTab({ whisperHash: targetHash, onHighlight, onRequestCompa
                                             </TableCell>
                                             <TableCell className={cn("align-top whitespace-pre-wrap break-words min-w-0", isApproved && "font-medium text-green-900 dark:text-green-300")}>
                                                 {displayValue}
+                                                {displayConf !== undefined && displayConf !== null && (
+                                                    <span className={cn(
+                                                        "ml-2 text-[9px] px-1 rounded border opacity-70 font-mono inline-block align-middle",
+                                                        displayConf >= 90 ? "bg-green-100 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800" :
+                                                        displayConf >= 70 ? "bg-yellow-100 text-yellow-700 border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-400 dark:border-yellow-800" :
+                                                        "bg-red-100 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800"
+                                                    )}>
+                                                        {displayConf}%
+                                                    </span>
+                                                )}
                                             </TableCell>
                                              <TableCell className="align-top text-right text-xs text-muted-foreground w-[50px]">
                                                 {row.sortKey !== Number.MAX_SAFE_INTEGER ? `L${row.sortKey}` : "-"}
